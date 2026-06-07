@@ -7,10 +7,16 @@ import { seedAdmin } from './database/seed-admin';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  // CORS (IMPORTANTE para Next.js)
+  app.enableCors({
+    origin: 'http://localhost:3001',
+    credentials: true,
+  });
 
   const dataSource = app.get(DataSource);
 
-  // 🔥 seeds iniciales
+  // seeds iniciales
   await seedRoles(dataSource);
   await seedAdmin(dataSource);
 
