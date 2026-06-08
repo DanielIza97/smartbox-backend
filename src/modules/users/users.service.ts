@@ -1,66 +1,82 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
-
 import { User } from './user.entity';
-import { Role } from '../roles/entities/role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
-
-    @InjectRepository(Role)
-    private readonly roleRepo: Repository<Role>,
+    private readonly userRepository: Repository<User>,
   ) {}
 
-  async create(dto: CreateUserDto) {
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
+  // 1. Crear un usuario vinculando su Rol por ID
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const { roleId, ...userData } = createUserDto;
 
-    const role = await this.roleRepo.findOne({
-      where: { name: 'CLIENT' },
+    const newUser = this.userRepository.create({
+      ...userData,
+      role: { id: roleId } as any, // Mapea la relación ManyToOne usando el ID del rol
+      status: 'active',
     });
 
-    if (!role) {
-      throw new Error('Role CLIENT not found');
-    }
-
-    const user = this.userRepo.create({
-      name: dto.name,
-      email: dto.email,
-      password: hashedPassword,
-      role,
-    });
-
-    return this.userRepo.save(user);
+    return await this.userRepository.save(newUser);
   }
 
-  async findByEmail(email: string) {
-    return this.userRepo
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.role', 'role')
-      .addSelect('user.password')
+  // 2. NUEVO: Listar todos los usuarios (Requerido por tu UsersController)
+  async findAll(): Promise<User[]> {
+    return await this.userRepository.find({
+      relations: { role: true }, // 👈 Sintaxis moderna de TypeORM
+    });
+  }
+
+  // 3. Buscar un usuario por su Email
+  async findByEmail(email: string): Promise<User | null> {
+    return await this.userRepository.createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role') 
+      .addSelect('user.password')          
       .where('user.email = :email', { email })
       .getOne();
   }
 
-  async findAll() {
-    return this.userRepo.find({
-      relations: {
-        role: true,
-      },
+  // 4. Buscar un único usuario por su ID
+  async findOne(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { role: true }, // 👈 Sintaxis moderna de TypeORM
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado.`);
+    }
+
+    return user;
+  }
+
+  // 🔐 5. Guardar el token de recuperación y su fecha de expiración
+  async updateResetToken(userId: string, token: string, expires: Date): Promise<void> {
+    await this.userRepository.update(userId, {
+      resetPasswordToken: token,
+      resetPasswordExpires: expires,
     });
   }
 
-  async findOne(id: string) {
-    return this.userRepo.findOne({
-      where: { id },
-      relations: {
-        role: true,
-      },
+  // 🔐 6. Buscar usuario por token (Saltándose el 'select: false' por QueryBuilder)
+  async findByResetToken(token: string): Promise<User | null> {
+    return await this.userRepository.createQueryBuilder('user')
+      .addSelect('user.resetPasswordToken')
+      .addSelect('user.resetPasswordExpires')
+      .where('user.reset_password_token = :token', { token })
+      .getOne();
+  }
+
+  // 🔐 7. Actualizar la contraseña del usuario y limpiar los tokens temporales
+  async updatePasswordAndClearToken(userId: string, hashedPassword: string): Promise<void> {
+    await this.userRepository.update(userId, {
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
     });
   }
 }
