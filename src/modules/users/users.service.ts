@@ -17,17 +17,17 @@ export class UsersService {
 
     const newUser = this.userRepository.create({
       ...userData,
-      role: { id: roleId } as any, // Mapea la relación ManyToOne usando el ID del rol
+      role: { id: roleId } as any,
       status: 'active',
     });
 
     return await this.userRepository.save(newUser);
   }
 
-  // 2. NUEVO: Listar todos los usuarios (Requerido por tu UsersController)
+  // 2. Listar todos los usuarios
   async findAll(): Promise<User[]> {
     return await this.userRepository.find({
-      relations: { role: true }, // 👈 Sintaxis moderna de TypeORM
+      relations: { role: true },
     });
   }
 
@@ -44,7 +44,7 @@ export class UsersService {
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: { role: true }, // 👈 Sintaxis moderna de TypeORM
+      relations: { role: true },
     });
 
     if (!user) {
@@ -54,7 +54,7 @@ export class UsersService {
     return user;
   }
 
-  // 🔐 5. Guardar el token de recuperación y su fecha de expiración
+  // 5. Guardar el token de recuperación y su fecha de expiración
   async updateResetToken(userId: string, token: string, expires: Date): Promise<void> {
     await this.userRepository.update(userId, {
       resetPasswordToken: token,
@@ -62,7 +62,7 @@ export class UsersService {
     });
   }
 
-  // 🔐 6. Buscar usuario por token (Saltándose el 'select: false' por QueryBuilder)
+  // 6. Buscar usuario por token (Saltándose el 'select: false' por QueryBuilder)
   async findByResetToken(token: string): Promise<User | null> {
     return await this.userRepository.createQueryBuilder('user')
       .addSelect('user.resetPasswordToken')
@@ -71,7 +71,7 @@ export class UsersService {
       .getOne();
   }
 
-  // 🔐 7. Actualizar la contraseña del usuario y limpiar los tokens temporales
+  // 7. Actualizar la contraseña del usuario y limpiar los tokens temporales
   async updatePasswordAndClearToken(userId: string, hashedPassword: string): Promise<void> {
     await this.userRepository.update(userId, {
       password: hashedPassword,
