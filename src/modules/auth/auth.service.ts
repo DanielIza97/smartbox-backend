@@ -1,15 +1,21 @@
 import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm'; 
+import { Repository } from 'typeorm';                 
+import { Role } from '../roles/entities/role.entity'; 
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { UsersService } from '../users/users.service';
+import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
   ) {}
 
   // 1. LOGIN
@@ -46,28 +52,89 @@ export class AuthService {
   }
 
   // 2. REGISTRO
-  async register(signUpData: any) {
-    const { email, password, name, roleId } = signUpData;
+  async register(registerDto: Omit<RegisterDto, 'roleName'>) {
+    const { email, password, name } = registerDto;
 
+    // 1. Validar si el usuario ya existe por email
     const userExists = await this.usersService.findByEmail(email);
     if (userExists) {
       throw new BadRequestException('El correo electrónico ya está registrado.');
     }
 
+    // 2. Encriptar la contraseña de forma segura
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // 3. ASIGNACIÓN AUTOMÁTICA DEL ROL BÁSICO
+    const DEFAULT_ROLE_UUID = 'bd6d3919-3ed1-4daf-9308-7c564d2d14f5';
+
+    // 4. Crear el usuario en la base de datos vinculando el rol por defecto
     const newUser = await this.usersService.create({
-      email,
       name,
+      email,
       password: hashedPassword,
-      roleId,
+      roleId: DEFAULT_ROLE_UUID,
     });
 
-    return newUser;
+    // 5. Retornar una respuesta limpia
+    return {
+      statusCode: 201,
+      message: 'Usuario registrado exitosamente',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        status: newUser.status,
+      },
+    };
+  }
+  
+  // 2. REGISTRO INTERNO (Para el SuperAdmin desde el Dashboard)
+  async registerInternal(registerDto: RegisterDto) {
+    const { email, password, name, roleName } = registerDto;
+
+    if (!roleName) {
+      throw new BadRequestException('El nombre del rol es obligatorio para registros internos.');
+    }
+
+    // 1. Validar si el usuario ya existe por email
+    const userExists = await this.usersService.findByEmail(email);
+    if (userExists) {
+      throw new BadRequestException('El correo electrónico ya está registrado.');
+    }
+
+    // 2. BUSCAR EL ROL EN LA BASE DE DATOS POR SU NOMBRE STRING
+    const role = await this.roleRepository.findOne({ where: { name: roleName } });
+    if (!role) {
+      throw new NotFoundException(`El rol '${roleName}' no existe en el sistema.`);
+    }
+
+    // 3. Encriptar la contraseña de forma segura
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 4. Crear el usuario vinculando el UUID dinámico obtenido de la consulta anterior
+    const newUser = await this.usersService.create({
+      name,
+      email,
+      password: hashedPassword,
+      roleId: role.id,
+    });
+
+    // 5. RETORNAR LA RESPUESTA LIMPIA (Faltaba este bloque para que Next.js responda con éxito)
+    return {
+      statusCode: 201,
+      message: 'Usuario administrativo creado exitosamente',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        status: newUser.status,
+      },
+    };
   }
 
-  // 3. SOLICITAR RECUPERACIÓN
+  // 4. SOLICITAR RECUPERACIÓN
   async forgotPassword(email: string) {
     const user = await this.usersService.findByEmail(email);
     

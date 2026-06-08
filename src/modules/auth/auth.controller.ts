@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -14,20 +15,28 @@ export class AuthController {
     return this.authService.login(email, password);
   }
 
-  // 2. REGISTRO DE NUEVOS ADMINISTRADORES / USUARIOS
+  // 2. REGISTRO PÚBLICO (Cualquier usuario final se registra solo)
   @Post('register')
-  async register(@Body() signUpData: any) {
-    return this.authService.register(signUpData);
+  async register(@Body() registerDto: RegisterDto) { // 🔄 Tipado correctamente con tu DTO limpio
+    return this.authService.register(registerDto);
   }
 
-  // 3. SOLICITAR ENLACE DE RECUPERACIÓN (Olvido de contraseña)
+  // 3. REGISTRO INTERNO (Para que tu SuperAdmin cree Admins o Staff desde el modal)
+  @Post('register-internal')
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles('SUPER_ADMIN')
+  async registerInternal(@Body() registerDto: RegisterDto) {
+    return this.authService.registerInternal(registerDto);
+  }
+
+  // 4. SOLICITAR ENLACE DE RECUPERACIÓN (Olvido de contraseña)
   @Post('forgot-password')
-  @HttpCode(HttpStatus.OK) // Cambia el código por defecto (21) a 200 OK
+  @HttpCode(HttpStatus.OK) // Cambia el código por defecto (201) a 200 OK
   async forgotPassword(@Body('email') email: string) {
     return this.authService.forgotPassword(email);
   }
 
-  // 4. RESTABLECER LA CONTRASEÑA USANDO EL TOKEN DE LA URL
+  // 5. RESTABLECER LA CONTRASEÑA USANDO EL TOKEN DE LA URL
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(
