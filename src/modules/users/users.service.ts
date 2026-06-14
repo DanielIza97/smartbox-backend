@@ -79,4 +79,19 @@ export class UsersService {
       resetPasswordExpires: null,
     });
   }
+
+  // 8. Editar Usuario
+  async update(id: string, updateData: any): Promise<User> {
+    const user = await this.findOne(id);
+    
+    const { roleId, ...rest } = updateData;
+
+    const dataToUpdate = {
+      ...rest,
+      role: roleId ? { id: roleId } : user.role
+    };
+
+    await this.userRepository.update(id, dataToUpdate);
+    return this.findOne(id);
+  }
 }
