@@ -8,13 +8,15 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 import { UsersModule } from '../users/users.module';
-import { RolesModule } from '../roles/roles.module'; 
-import { Role } from '../roles/entities/role.entity'; 
+import { RolesModule } from '../roles/roles.module';
+import { MailModule } from '../mail/mail.module';
+import { Role } from '../roles/entities/role.entity';
 
 @Module({
   imports: [
     UsersModule,
-    RolesModule, 
+    RolesModule,
+    MailModule,
     TypeOrmModule.forFeature([Role]),
 
     JwtModule.registerAsync({

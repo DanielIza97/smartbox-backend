@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm'; 
 import { Repository } from 'typeorm';                 
 import { Role } from '../roles/entities/role.entity'; 
@@ -7,13 +7,17 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
   ) {}
@@ -148,8 +152,14 @@ export class AuthService {
 
     await this.usersService.updateResetToken(user.id, token, expires);
 
-    const resetUrl = `http://localhost:3000/reset-password?token=${token}`;
-    console.log(`\n📩 [SMARTBOX MAIL] Enlace enviado a ${email}: \n${resetUrl}\n`);
+    void this.mailService
+      .sendResetPasswordEmail(email, token)
+      .catch((error) => {
+        this.logger.error(
+          `No se pudo enviar el correo de recuperación a ${email}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
 
     return { message: 'Se ha generado el enlace de recuperación con éxito.' };
   }

@@ -39,12 +39,7 @@ export class AuthController {
   // 5. RESTABLECER LA CONTRASEÑA USANDO EL TOKEN DE LA URL
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  async resetPassword(
-    @Query('token') token: string,
-    @Body('password') passwordBody: any,
-  ) {
-    // Le pasamos el token que viene de la URL (?token=...) 
-    // y el body completo al servicio
-    return this.authService.resetPassword(token, passwordBody);
+  async resetPassword(@Body() body: { token: string; newPassword: string }) {
+    return this.authService.resetPassword(body.token, body.newPassword);
   }
 }
