@@ -37,8 +37,8 @@ export class AuthService {
 
     if (!passwordValid) {
       throw new UnauthorizedException({
-              message: 'Tu correo o contraseña no son correctos.',
-              error: 'Unauthorized'
+        message: 'Tu correo o contraseña no son correctos.',
+        error: 'Unauthorized'
       });   
     }
 
