@@ -12,17 +12,21 @@ export class UsersService {
   ) {}
 
   // 1. Crear un usuario vinculando su Rol por ID
-  async create(createUserDto: CreateUserDto): Promise<User> {
-    const { roleId, ...userData } = createUserDto;
+ async create(createUserDto: CreateUserDto): Promise<User> {
+  const { roleId, ...userData } = createUserDto;
 
-    const newUser = this.userRepository.create({
-      ...userData,
-      role: { id: roleId } as any,
-      status: 'active',
-    });
+  const newUser = this.userRepository.create({
+    ...userData,
+    role: { id: roleId },
+    status: 'active',
+  });
 
+  try {
     return await this.userRepository.save(newUser);
+  } catch (error) {
+    throw new BadRequestException('No se pudo crear el usuario. Verifica que el Rol sea válido.');
   }
+}
 
   // 2. Listar todos los usuarios
   async findAll(): Promise<User[]> {
@@ -81,17 +85,15 @@ export class UsersService {
   }
 
   // 8. Editar Usuario
-  async update(id: string, updateData: any): Promise<User> {
-    const user = await this.findOne(id);
-    
-    const { roleId, ...rest } = updateData;
+ async update(id: string, updateData: any): Promise<User> {
+  const user = await this.findOne(id); 
+  const { roleId, ...rest } = updateData;
 
-    const dataToUpdate = {
-      ...rest,
-      role: roleId ? { id: roleId } : user.role
-    };
+  const updatedUser = this.userRepository.merge(user, {
+    ...rest,
+    role: roleId ? { id: roleId } : user.role
+  });
 
-    await this.userRepository.update(id, dataToUpdate);
-    return this.findOne(id);
-  }
+  return await this.userRepository.save(updatedUser);
+}
 }
