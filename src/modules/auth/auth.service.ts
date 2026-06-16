@@ -27,13 +27,19 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException({
+        message: 'Tu correo o contraseña no son correctos.',
+        error: 'Unauthorized'
+      });    
     }
 
     const passwordValid = await bcrypt.compare(password, user.password);
 
     if (!passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException({
+              message: 'Tu correo o contraseña no son correctos.',
+              error: 'Unauthorized'
+            });   
     }
 
     const payload = {
@@ -125,7 +131,7 @@ export class AuthService {
       roleId: role.id,
     });
 
-    // 5. RETORNAR LA RESPUESTA LIMPIA (Faltaba este bloque para que Next.js responda con éxito)
+    // 5. Retornar respuesta
     return {
       statusCode: 201,
       message: 'Usuario administrativo creado exitosamente',
@@ -138,7 +144,7 @@ export class AuthService {
     };
   }
 
-  // 4. SOLICITAR RECUPERACIÓN
+  // 3. SOLICITAR RECUPERACIÓN
   async forgotPassword(email: string) {
     const user = await this.usersService.findByEmail(email);
     
@@ -169,11 +175,11 @@ export class AuthService {
     const user = await this.usersService.findByResetToken(token);
     
     if (!user) {
-      throw new BadRequestException('El token de recuperación es inválido o ya fue utilizado.');
+      throw new BadRequestException('El enlace de recuperación es inválido o ya fue utilizado.');
     }
 
     if (new Date() > user.resetPasswordExpires!) {
-      throw new BadRequestException('El token de recuperación ha expirado.');
+      throw new BadRequestException('El enlace de recuperación ha expirado.');
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -182,9 +188,5 @@ export class AuthService {
     await this.usersService.updatePasswordAndClearToken(user.id, hashedPassword);
 
     return { message: 'Tu contraseña ha sido actualizada con éxito.' };
-  }
-
-  async validateUser(userId: string) {
-    return this.usersService.findOne(userId);
   }
 }
