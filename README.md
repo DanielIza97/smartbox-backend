@@ -59,9 +59,9 @@ http://localhost:3000/docs
 Endpoints disponibles hoy:
 
 - **Auth** (`/auth`): `login`, `register` (público, rol `CLIENT`), `register-internal` (solo `SUPER_ADMIN`), `forgot-password`, `reset-password`, `verify-email-change`.
-- **Users** (`/users`): CRUD protegido por rol, `request-email-change` (usuario autenticado), `confirm-email-change` (público, vía token).
+- **Users** (`/users`): CRUD completo protegido por rol (incluye `DELETE /users/:id`), `request-email-change` (usuario autenticado), `confirm-email-change` (público, vía token).
 - **Roles** (`/roles`): listado de roles.
-- **Admin** (`/admin`): endpoint mínimo restringido a `ADMIN`, pendiente de definir su alcance real.
+- **Admin** (`/admin`): resumen del sistema (usuarios totales, por rol, roles totales), restringido a `ADMIN`.
 
 ## Tests
 

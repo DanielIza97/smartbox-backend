@@ -5,6 +5,9 @@ import {
   Body,
   Param,
   Put,
+  Delete,
+  HttpCode,
+  HttpStatus,
   Request,
   UseGuards,
   BadRequestException,
@@ -39,6 +42,16 @@ export class UsersController {
   @Put(':id')
   update(@Param('id') id: string, @Body() updateDto: UpdateUserDto) {
     return this.usersService.update(id, updateDto);
+  }
+
+  @ApiOperation({ summary: 'Eliminar un usuario' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(@Param('id') id: string) {
+    await this.usersService.remove(id);
   }
 
   @ApiOperation({ summary: 'Listar todos los usuarios' })

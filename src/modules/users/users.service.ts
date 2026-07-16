@@ -117,6 +117,12 @@ export class UsersService {
     return await this.userRepository.save(updatedUser);
   }
 
+  // 8b. Eliminar usuario
+  async remove(id: string): Promise<void> {
+    const user = await this.findOne(id);
+    await this.userRepository.remove(user);
+  }
+
   // 9. Iniciar solicitud de cambio de email
   async initiateEmailChange(
     userId: string,

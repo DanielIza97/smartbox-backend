@@ -23,6 +23,7 @@ describe('Rutas protegidas (e2e, sin base de datos)', () => {
   const usersServiceMock = {
     create: jest.fn().mockResolvedValue({ id: 'u1' }),
     update: jest.fn().mockResolvedValue({ id: 'u1' }),
+    remove: jest.fn().mockResolvedValue(undefined),
     findAll: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue({ id: 'u1' }),
   };
@@ -90,6 +91,26 @@ describe('Rutas protegidas (e2e, sin base de datos)', () => {
         .put('/users/some-id')
         .send({ name: 'x' })
         .expect(401);
+    });
+  });
+
+  describe('DELETE /users/:id', () => {
+    it('devuelve 401 sin token', () => {
+      return request(app.getHttpServer()).delete('/users/some-id').expect(401);
+    });
+
+    it('devuelve 403 con token válido pero rol insuficiente (CLIENT)', () => {
+      return request(app.getHttpServer())
+        .delete('/users/some-id')
+        .set('Authorization', `Bearer ${tokenFor('CLIENT')}`)
+        .expect(403);
+    });
+
+    it('devuelve 204 con token válido y rol ADMIN', () => {
+      return request(app.getHttpServer())
+        .delete('/users/some-id')
+        .set('Authorization', `Bearer ${tokenFor('ADMIN')}`)
+        .expect(204);
     });
   });
 
