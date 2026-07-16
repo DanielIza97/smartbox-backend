@@ -87,6 +87,7 @@ Endpoints disponibles hoy:
 - **Roles** (`/roles`): listado de roles.
 - **Gyms** (`/gyms`): alta y listado de gimnasios (`SUPER_ADMIN`), lectura por id (`SUPER_ADMIN`, o `ADMIN`/`STAFF` solo del propio gimnasio).
 - **Admin** (`/admin`): resumen del sistema (usuarios totales, por rol, roles totales), restringido a `ADMIN`, scopeado al gimnasio del solicitante (`SUPER_ADMIN` ve el sistema completo).
+- **Plans** (`/plans`): un solo plan mensual por gimnasio (enforced con `UNIQUE` en `gym_id`) — alta (`SUPER_ADMIN`/`ADMIN`, forzado al propio gym para `ADMIN`), listado y lectura por id scopeados por gimnasio para todos los roles autenticados (incluye `CLIENT`, para ver el plan antes de suscribirse). Todavía sin integración de Stripe (`E2-02`) ni endpoints de `Membership` (llegan con la suscripción).
 
 ## Tests
 
@@ -106,7 +107,7 @@ Lo que falta es el producto en sí — **SmartBox v1.0** completo requiere, en e
 
 1. **Epic 0 · Hardening** — resuelto: migraciones, rate limiting, CORS configurable y el fix de roles de `request-email-change`. Queda la decisión de infraestructura de despliegue (E0-15).
 2. **Epic 1 · Fundación multi-tenant** — resuelto: entidad `Gym`, `User.gymId`, scoping por gimnasio en `Users`/`Admin`, aislamiento 403 verificado con tests unitarios y e2e.
-3. **Epic 2 · Membresías y facturación recurrente** — Stripe Billing, un solo plan por gimnasio al arrancar. Siguiente en el roadmap.
+3. **Epic 2 · Membresías y facturación recurrente** — en progreso. Sesión de scoping de billing cerrada; `E2-01` resuelto (entidades `Plan`/`Membership`, un plan por gimnasio). Falta la integración con Stripe (`E2-02` en adelante).
 4. **Epic 3 · Reservas** de clases, validadas contra membresía activa.
 5. **Epic 4 · Operación del gimnasio** y **Epic 5 · Observabilidad**, que cierran v1.0.
 
