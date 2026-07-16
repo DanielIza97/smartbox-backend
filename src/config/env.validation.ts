@@ -33,4 +33,14 @@ export const envValidationSchema = Joi.object({
 
   // Orígenes permitidos por CORS, separados por comas (p. ej. "http://localhost:3000,https://admin.smartbox.com").
   CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
+
+  // Credenciales de la app de Mercado Pago (modelo Marketplace/OAuth: cada
+  // gimnasio conecta su propia cuenta, ver Gym.mercadoPago*). ACCESS_TOKEN
+  // es el token propio de la app de SmartBox, requerido por el SDK para
+  // instanciar el cliente de OAuth aunque la autenticación real del
+  // intercambio de código vaya por client_id/client_secret en el body.
+  MERCADOPAGO_ACCESS_TOKEN: Joi.string().required(),
+  MERCADOPAGO_CLIENT_ID: Joi.string().required(),
+  MERCADOPAGO_CLIENT_SECRET: Joi.string().required(),
+  MERCADOPAGO_REDIRECT_URI: Joi.string().uri().required(),
 }).unknown(true);

@@ -37,9 +37,13 @@ export class Membership {
   @Column({ type: 'varchar' })
   status!: MembershipStatus;
 
-  // Se completan en E2-02/E2-03 al integrar Stripe Billing y sus webhooks.
-  @Column({ name: 'stripe_subscription_id', type: 'varchar', nullable: true })
-  stripeSubscriptionId?: string | null;
+  // Se completan en E2-02/E2-03 al integrar Mercado Pago y sus webhooks.
+  @Column({
+    name: 'mercadopago_preapproval_id',
+    type: 'varchar',
+    nullable: true,
+  })
+  mercadoPagoPreapprovalId?: string | null;
 
   @Column({ name: 'trial_ends_at', type: 'timestamp', nullable: true })
   trialEndsAt?: Date | null;

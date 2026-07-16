@@ -53,4 +53,18 @@ export class GymsController {
     }
     return this.gymsService.findOne(id);
   }
+
+  @ApiOperation({
+    summary:
+      'Iniciar la conexión OAuth con Mercado Pago para este gimnasio (modelo Marketplace)',
+  })
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Get(':id/mercadopago/connect')
+  connectMercadoPago(@Param('id') id: string, @Request() req: RequestWithUser) {
+    const requester = req.user!;
+    if (requester.role !== 'SUPER_ADMIN' && requester.gymId !== id) {
+      throw new ForbiddenException('No tenés acceso a este gimnasio.');
+    }
+    return this.gymsService.startMercadoPagoConnect(id);
+  }
 }

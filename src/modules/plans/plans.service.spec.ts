@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
   ForbiddenException,
@@ -10,6 +11,8 @@ import { PlansService } from './plans.service';
 import { Plan } from './entities/plan.entity';
 import { Gym } from '../gyms/entities/gym.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
+import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
+import { GymsService } from '../gyms/gyms.service';
 
 describe('PlansService', () => {
   let service: PlansService;
@@ -20,6 +23,12 @@ describe('PlansService', () => {
     findOne: jest.Mock;
   };
   let gymRepository: { findOne: jest.Mock };
+  let mercadoPagoService: {
+    clientFor: jest.Mock;
+  };
+  let gymsService: { getMercadoPagoAccessToken: jest.Mock };
+  let configService: { get: jest.Mock };
+  let plansApiMock: { create: jest.Mock };
 
   const superAdmin: AuthenticatedUser = {
     id: 'super-1',
@@ -42,12 +51,23 @@ describe('PlansService', () => {
       findOne: jest.fn(),
     };
     gymRepository = { findOne: jest.fn() };
+    plansApiMock = { create: jest.fn().mockResolvedValue({ id: 'plan_test' }) };
+    mercadoPagoService = {
+      clientFor: jest.fn().mockReturnValue({ plans: plansApiMock }),
+    };
+    gymsService = {
+      getMercadoPagoAccessToken: jest.fn().mockResolvedValue('gym-a-token'),
+    };
+    configService = { get: jest.fn().mockReturnValue('http://localhost:3000') };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PlansService,
         { provide: getRepositoryToken(Plan), useValue: planRepository },
         { provide: getRepositoryToken(Gym), useValue: gymRepository },
+        { provide: MercadoPagoService, useValue: mercadoPagoService },
+        { provide: GymsService, useValue: gymsService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
@@ -87,7 +107,7 @@ describe('PlansService', () => {
     });
 
     it('crea el plan cuando el gimnasio existe y no tiene uno todavía', async () => {
-      gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
       planRepository.findOne.mockResolvedValue(null);
 
       const result = await service.create({
@@ -96,14 +116,64 @@ describe('PlansService', () => {
         gymId: 'gym-a',
       });
 
+      expect(gymsService.getMercadoPagoAccessToken).toHaveBeenCalledWith(
+        'gym-a',
+      );
+      expect(mercadoPagoService.clientFor).toHaveBeenCalledWith('gym-a-token');
+      expect(plansApiMock.create).toHaveBeenCalledWith({
+        body: {
+          reason: 'Gym A — Plan mensual',
+          back_url: 'http://localhost:3000/dashboard/membership',
+          auto_recurring: {
+            frequency: 1,
+            frequency_type: 'months',
+            transaction_amount: 49.99,
+            currency_id: 'USD',
+            free_trial: { frequency: 14, frequency_type: 'days' },
+          },
+        },
+      });
       expect(planRepository.save).toHaveBeenCalled();
       expect(result).toEqual(
         expect.objectContaining({
           name: 'Plan mensual',
           priceCents: 4999,
           gymId: 'gym-a',
+          mercadoPagoPlanId: 'plan_test',
         }),
       );
+    });
+
+    it('lanza BadRequestException si Mercado Pago falla al crear el plan', async () => {
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
+      planRepository.findOne.mockResolvedValue(null);
+      plansApiMock.create.mockRejectedValue(new Error('mercadopago down'));
+
+      await expect(
+        service.create({
+          name: 'Plan mensual',
+          priceCents: 4999,
+          gymId: 'gym-a',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('propaga el error si el gimnasio no conectó Mercado Pago', async () => {
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
+      planRepository.findOne.mockResolvedValue(null);
+      gymsService.getMercadoPagoAccessToken.mockRejectedValue(
+        new BadRequestException(
+          'Este gimnasio todavía no conectó su cuenta de Mercado Pago.',
+        ),
+      );
+
+      await expect(
+        service.create({
+          name: 'Plan mensual',
+          priceCents: 4999,
+          gymId: 'gym-a',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -30,9 +30,9 @@ export class Plan {
   @Column({ name: 'price_cents' })
   priceCents!: number;
 
-  // Se completa en E2-02 al crear el Product/Price en Stripe.
-  @Column({ name: 'stripe_price_id', type: 'varchar', nullable: true })
-  stripePriceId?: string | null;
+  // Se completa en E2-02 al crear el PreApprovalPlan en Mercado Pago.
+  @Column({ name: 'mercadopago_plan_id', type: 'varchar', nullable: true })
+  mercadoPagoPlanId?: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

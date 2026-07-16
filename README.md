@@ -71,6 +71,9 @@ Ver [`.env.example`](.env.example) para la lista completa con comentarios. Resum
 | `MAILTRAP_FROM_EMAIL` / `MAILTRAP_FROM_NAME` | Remitente de los correos. |
 | `FRONTEND_URL` | Base usada para armar los enlaces de los correos (reset de contraseña, verificación de cambio de email). |
 | `CORS_ORIGINS` | Orígenes permitidos por CORS, separados por comas. Por defecto `http://localhost:3000`. |
+| `MERCADOPAGO_ACCESS_TOKEN` | Access token propio de la **app** de SmartBox (no de ningún gimnasio) — lo pide el SDK para instanciar el cliente de OAuth. Obligatorio. |
+| `MERCADOPAGO_CLIENT_ID` / `MERCADOPAGO_CLIENT_SECRET` | Credenciales de la app de Mercado Pago, usadas en el handshake OAuth con el que cada gimnasio conecta su propia cuenta (modelo Marketplace). Obligatorias. |
+| `MERCADOPAGO_REDIRECT_URI` | URL de callback registrada en la app de Mercado Pago (`GET /mercadopago/oauth/callback`). Obligatoria. |
 
 ## API
 
@@ -85,9 +88,10 @@ Endpoints disponibles hoy:
 - **Auth** (`/auth`): `login` (incluye `gymId` en el JWT), `register` (público, rol `CLIENT`, `gymId` obligatorio), `register-internal` (solo `SUPER_ADMIN`, `gymId` obligatorio salvo para crear otro `SUPER_ADMIN`), `forgot-password`, `reset-password`, `verify-email-change`.
 - **Users** (`/users`): CRUD completo protegido por rol y **scopeado por gimnasio** (incluye `DELETE /users/:id`) — `ADMIN`/`STAFF` solo ven/editan usuarios de su propio gimnasio (403, no 404, si intentan acceder a otro), `SUPER_ADMIN` sin restricción. `request-email-change` (usuario autenticado), `confirm-email-change` (público, vía token).
 - **Roles** (`/roles`): listado de roles.
-- **Gyms** (`/gyms`): alta y listado de gimnasios (`SUPER_ADMIN`), lectura por id (`SUPER_ADMIN`, o `ADMIN`/`STAFF` solo del propio gimnasio).
+- **Gyms** (`/gyms`): alta y listado de gimnasios (`SUPER_ADMIN`), lectura por id (`SUPER_ADMIN`, o `ADMIN`/`STAFF` solo del propio gimnasio). `GET /gyms/:id/mercadopago/connect` (`SUPER_ADMIN`/`ADMIN` propio) inicia el handshake OAuth para que el gimnasio conecte su propia cuenta de Mercado Pago — **modelo Marketplace**: la plata de los socios va directo a la cuenta del gimnasio, SmartBox no la toca. `GET /mercadopago/oauth/callback` es el redirect público al que llama Mercado Pago (sin JWT, protegido por un `state` de un solo uso).
 - **Admin** (`/admin`): resumen del sistema (usuarios totales, por rol, roles totales), restringido a `ADMIN`, scopeado al gimnasio del solicitante (`SUPER_ADMIN` ve el sistema completo).
-- **Plans** (`/plans`): un solo plan mensual por gimnasio (enforced con `UNIQUE` en `gym_id`) — alta (`SUPER_ADMIN`/`ADMIN`, forzado al propio gym para `ADMIN`), listado y lectura por id scopeados por gimnasio para todos los roles autenticados (incluye `CLIENT`, para ver el plan antes de suscribirse). Todavía sin integración de Stripe (`E2-02`) ni endpoints de `Membership` (llegan con la suscripción).
+- **Plans** (`/plans`): un solo plan mensual por gimnasio (enforced con `UNIQUE` en `gym_id`) — alta (`SUPER_ADMIN`/`ADMIN`, forzado al propio gym para `ADMIN`; crea un `PreApprovalPlan` **en la cuenta de Mercado Pago del gimnasio**, con trial de 14 días — falla con 400 si el gimnasio todavía no conectó su cuenta), listado y lectura por id scopeados por gimnasio para todos los roles autenticados (incluye `CLIENT`, para ver el plan antes de suscribirse).
+- **Memberships** (`/memberships`): `POST /memberships/subscribe` (`CLIENT`) inicia una suscripción (`PreApproval` en la cuenta de Mercado Pago del gimnasio, estado `pending`) y devuelve un `checkoutUrl` hosted para cargar la tarjeta. La `Membership` en sí se crea recién cuando el webhook confirme la suscripción (`E2-03`, todavía no implementado).
 
 ## Tests
 
@@ -107,7 +111,7 @@ Lo que falta es el producto en sí — **SmartBox v1.0** completo requiere, en e
 
 1. **Epic 0 · Hardening** — resuelto: migraciones, rate limiting, CORS configurable y el fix de roles de `request-email-change`. Queda la decisión de infraestructura de despliegue (E0-15).
 2. **Epic 1 · Fundación multi-tenant** — resuelto: entidad `Gym`, `User.gymId`, scoping por gimnasio en `Users`/`Admin`, aislamiento 403 verificado con tests unitarios y e2e.
-3. **Epic 2 · Membresías y facturación recurrente** — en progreso. Sesión de scoping de billing cerrada; `E2-01` resuelto (entidades `Plan`/`Membership`, un plan por gimnasio). Falta la integración con Stripe (`E2-02` en adelante).
+3. **Epic 2 · Membresías y facturación recurrente** — en progreso. Sesión de scoping de billing cerrada; `E2-01` resuelto (entidades `Plan`/`Membership`, un plan por gimnasio); `E2-02` resuelto (integración con **Mercado Pago**, modelo **Marketplace** — cada gimnasio conecta y cobra en su propia cuenta vía OAuth; Stripe no soporta cuentas en Ecuador, de ahí el cambio de proveedor). Falta el webhook (`E2-03` en adelante) y el refresco automático de tokens OAuth vencidos.
 4. **Epic 3 · Reservas** de clases, validadas contra membresía activa.
 5. **Epic 4 · Operación del gimnasio** y **Epic 5 · Observabilidad**, que cierran v1.0.
 

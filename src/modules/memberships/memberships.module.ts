@@ -2,12 +2,20 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Membership } from './entities/membership.entity';
+import { Plan } from '../plans/entities/plan.entity';
+import { MembershipsService } from './memberships.service';
+import { MembershipsController } from './memberships.controller';
+import { MercadoPagoModule } from '../../common/mercadopago/mercadopago.module';
+import { GymsModule } from '../gyms/gyms.module';
 
-// Solo registra la entidad por ahora — el servicio/controller con la
-// lógica de suscripción (subscribe, webhooks, ciclo de vida) llega en
-// E2-02/E2-03, cuando exista un consumidor real.
 @Module({
-  imports: [TypeOrmModule.forFeature([Membership])],
-  exports: [TypeOrmModule],
+  imports: [
+    TypeOrmModule.forFeature([Membership, Plan]),
+    MercadoPagoModule,
+    GymsModule,
+  ],
+  controllers: [MembershipsController],
+  providers: [MembershipsService],
+  exports: [TypeOrmModule, MembershipsService],
 })
 export class MembershipsModule {}
