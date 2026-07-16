@@ -14,9 +14,9 @@ export async function seedRoles(dataSource: DataSource) {
 
   const existingRoles = await roleRepo.find();
 
-  const existingNames = new Set(existingRoles.map(r => r.name));
+  const existingNames = new Set(existingRoles.map((r) => r.name));
 
-  const toInsert = roles.filter(r => !existingNames.has(r.name));
+  const toInsert = roles.filter((r) => !existingNames.has(r.name));
 
   if (toInsert.length > 0) {
     await roleRepo.save(toInsert);

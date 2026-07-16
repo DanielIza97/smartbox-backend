@@ -11,11 +11,11 @@ export class RolesService {
   ) {}
 
   async findAll() {
-  return await this.roleRepository.find({ 
-    select: {
-      id: true,
-      name: true
-    }
-  });
-}
+    return await this.roleRepository.find({
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+  }
 }

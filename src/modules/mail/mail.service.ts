@@ -87,4 +87,43 @@ export class MailService {
       `Correo de recuperación enviado a ${email}${this.isSandbox ? ' (Mailtrap Sandbox)' : ''}`,
     );
   }
+
+  async sendEmailChangeVerification(
+    email: string,
+    token: string,
+  ): Promise<void> {
+    if (!this.client) {
+      this.logger.warn(
+        `Omitiendo envío de correo a ${email}: Mailtrap no configurado.`,
+      );
+      return;
+    }
+
+    const verifyUrl = `${this.frontendUrl}/confirm-email?token=${token}`;
+    const subjectPrefix = this.isSandbox ? '[SANDBOX] ' : '';
+
+    await this.client.send({
+      from: { name: this.fromName, email: this.fromEmail },
+      to: [{ email }],
+      subject: `${subjectPrefix}Verificación de cambio de correo - Smartbox`,
+      text: `Para completar el cambio de tu correo, visita: ${verifyUrl}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Confirmar cambio de correo electrónico</h2>
+          <p>Has solicitado cambiar tu correo electrónico en Smartbox.</p>
+          <p>Para completar el proceso, por favor haz clic en el siguiente botón:</p>
+          <p>
+            <a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 6px;">
+              Confirmar nuevo correo
+            </a>
+          </p>
+          <p style="color: #6b7280; font-size: 14px;">
+            Si no has solicitado este cambio, puedes ignorar este mensaje con seguridad.
+          </p>
+        </div>
+      `,
+    });
+
+    this.logger.log(`Correo de verificación de cambio enviado a ${email}`);
+  }
 }

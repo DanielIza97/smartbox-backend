@@ -31,25 +31,48 @@ export class User {
   @Column({ default: 'active' })
   status!: string;
 
-  @Column({ 
-    name: 'reset_password_token', 
-    type: 'varchar', 
-    nullable: true, 
-    select: false 
+  @Column({
+    name: 'reset_password_token',
+    type: 'varchar',
+    nullable: true,
+    select: false,
   })
   resetPasswordToken!: string | null;
 
-  @Column({ 
-    name: 'reset_password_expires', 
-    type: 'timestamp', 
-    nullable: true, 
-    select: false 
+  @Column({
+    name: 'reset_password_expires',
+    type: 'timestamp',
+    nullable: true,
+    select: false,
   })
   resetPasswordExpires!: Date | null;
 
-  @CreateDateColumn()
+  @Column({
+    name: 'pending_email',
+    type: 'varchar',
+    nullable: true,
+  })
+  pendingEmail!: string | null;
+
+  @Column({
+    name: 'email_change_token',
+    type: 'varchar',
+    nullable: true,
+    select: false,
+  })
+  emailChangeToken!: string | null;
+
+  @Column({
+    name: 'email_change_token_expires',
+    type: 'timestamp',
+    nullable: true,
+    select: false,
+  })
+  emailChangeTokenExpires!: Date | null;
+
+  @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 }

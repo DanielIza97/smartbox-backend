@@ -7,9 +7,13 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+
 import { UsersModule } from '../users/users.module';
 import { RolesModule } from '../roles/roles.module';
 import { MailModule } from '../mail/mail.module';
+import { TokenModule } from '../../common/token/token.module';
 import { Role } from '../roles/entities/role.entity';
 
 @Module({
@@ -17,6 +21,7 @@ import { Role } from '../roles/entities/role.entity';
     UsersModule,
     RolesModule,
     MailModule,
+    TokenModule,
     TypeOrmModule.forFeature([Role]),
 
     JwtModule.registerAsync({
@@ -24,21 +29,16 @@ import { Role } from '../roles/entities/role.entity';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const secret = config.get<string>('JWT_SECRET');
-
-        if (!secret) {
-          throw new Error('JWT_SECRET no está definido');
-        }
-
+        if (!secret) throw new Error('JWT_SECRET no está definido');
         return {
           secret,
-          signOptions: {
-            expiresIn: config.get('JWT_EXPIRES') as any,
-          },
+          signOptions: { expiresIn: config.get('JWT_EXPIRES') || '1h' },
         };
       },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
+  exports: [JwtAuthGuard, RolesGuard, JwtModule],
 })
 export class AuthModule {}
