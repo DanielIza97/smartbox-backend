@@ -1,9 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import type { RequestWithUser } from '../auth/types/auth.types';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -17,7 +18,7 @@ export class AdminController {
   })
   @Get()
   @Roles('ADMIN')
-  getDashboardSummary() {
-    return this.adminService.getDashboardSummary();
+  getDashboardSummary(@Request() req: RequestWithUser) {
+    return this.adminService.getDashboardSummary(req.user!);
   }
 }

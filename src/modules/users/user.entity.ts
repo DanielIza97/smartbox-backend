@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 
 import { Role } from '../roles/entities/role.entity';
+import { Gym } from '../gyms/entities/gym.entity';
 
 @Entity('users')
 export class User {
@@ -27,6 +28,11 @@ export class User {
   @ManyToOne(() => Role)
   @JoinColumn({ name: 'role_id' })
   role!: Role;
+
+  // Nulo solo para SUPER_ADMIN — el resto de los roles pertenece a un gimnasio.
+  @ManyToOne(() => Gym, { nullable: true })
+  @JoinColumn({ name: 'gym_id' })
+  gym!: Gym | null;
 
   @Column({ default: 'active' })
   status!: string;

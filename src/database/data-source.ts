@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 
 import { User } from '../modules/users/user.entity';
 import { Role } from '../modules/roles/entities/role.entity';
+import { Gym } from '../modules/gyms/entities/gym.entity';
 
 // DataSource standalone para el CLI de TypeORM (migration:generate/run/revert).
 // No pasa por el ConfigModule de Nest — lee process.env directo (dotenv/config
@@ -14,7 +15,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DATABASE_USER,
   password: process.env.DATABASE_PASSWORD,
   database: process.env.DATABASE_NAME,
-  entities: [User, Role],
+  entities: [User, Role, Gym],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,
 });

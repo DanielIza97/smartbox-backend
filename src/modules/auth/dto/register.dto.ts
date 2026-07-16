@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'Ada Lovelace' })
@@ -22,4 +28,12 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   roleName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'UUID del gimnasio al que se une. Obligatorio salvo para roleName=SUPER_ADMIN.',
+  })
+  @IsOptional()
+  @IsUUID()
+  gymId?: string;
 }

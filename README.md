@@ -82,10 +82,11 @@ http://localhost:3000/docs
 
 Endpoints disponibles hoy:
 
-- **Auth** (`/auth`): `login`, `register` (público, rol `CLIENT`), `register-internal` (solo `SUPER_ADMIN`), `forgot-password`, `reset-password`, `verify-email-change`.
-- **Users** (`/users`): CRUD completo protegido por rol (incluye `DELETE /users/:id`), `request-email-change` (usuario autenticado), `confirm-email-change` (público, vía token).
+- **Auth** (`/auth`): `login` (incluye `gymId` en el JWT), `register` (público, rol `CLIENT`, `gymId` obligatorio), `register-internal` (solo `SUPER_ADMIN`, `gymId` obligatorio salvo para crear otro `SUPER_ADMIN`), `forgot-password`, `reset-password`, `verify-email-change`.
+- **Users** (`/users`): CRUD completo protegido por rol y **scopeado por gimnasio** (incluye `DELETE /users/:id`) — `ADMIN`/`STAFF` solo ven/editan usuarios de su propio gimnasio (403, no 404, si intentan acceder a otro), `SUPER_ADMIN` sin restricción. `request-email-change` (usuario autenticado), `confirm-email-change` (público, vía token).
 - **Roles** (`/roles`): listado de roles.
-- **Admin** (`/admin`): resumen del sistema (usuarios totales, por rol, roles totales), restringido a `ADMIN`.
+- **Gyms** (`/gyms`): alta y listado de gimnasios (`SUPER_ADMIN`), lectura por id (`SUPER_ADMIN`, o `ADMIN`/`STAFF` solo del propio gimnasio).
+- **Admin** (`/admin`): resumen del sistema (usuarios totales, por rol, roles totales), restringido a `ADMIN`, scopeado al gimnasio del solicitante (`SUPER_ADMIN` ve el sistema completo).
 
 ## Tests
 
@@ -103,9 +104,9 @@ Este backend cubre hoy la capa de identidad (Auth, Users, Roles), endurecida par
 
 Lo que falta es el producto en sí — **SmartBox v1.0** completo requiere, en este orden:
 
-1. **Epic 0 · Hardening pendiente** — migraciones, rate limiting, CORS configurable y el fix de roles de `request-email-change` ya resueltos; queda la decisión de infraestructura de despliegue (E0-15).
-2. **Epic 1 · Fundación multi-tenant** — entidad `Gym`, cada gimnasio es un cliente aislado del SaaS.
-3. **Epic 2 · Membresías y facturación recurrente** — Stripe Billing, un solo plan por gimnasio al arrancar.
+1. **Epic 0 · Hardening** — resuelto: migraciones, rate limiting, CORS configurable y el fix de roles de `request-email-change`. Queda la decisión de infraestructura de despliegue (E0-15).
+2. **Epic 1 · Fundación multi-tenant** — resuelto: entidad `Gym`, `User.gymId`, scoping por gimnasio en `Users`/`Admin`, aislamiento 403 verificado con tests unitarios y e2e.
+3. **Epic 2 · Membresías y facturación recurrente** — Stripe Billing, un solo plan por gimnasio al arrancar. Siguiente en el roadmap.
 4. **Epic 3 · Reservas** de clases, validadas contra membresía activa.
 5. **Epic 4 · Operación del gimnasio** y **Epic 5 · Observabilidad**, que cierran v1.0.
 

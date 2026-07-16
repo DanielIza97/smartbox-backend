@@ -10,9 +10,10 @@ Backend (NestJS + PostgreSQL) de **SmartBox**, un SaaS de gestión para gimnasio
 
 ## Dónde estamos
 
-- **Completo y endurecido**: identidad — auth, usuarios, roles (ver README para el detalle de endpoints).
-- **Siguiente en el roadmap**: Sprint 0 (Epic 0 · Hardening pendiente) → Sprint 1 (Epic 1 · Fundación multi-tenant) → Epic 2 (Membresías y facturación) → Epic 3 (Reservas) → Epic 4 (Operación del gimnasio) → Epic 5 (Observabilidad). Eso cierra **SmartBox v1.0**.
-- Antes de arrancar una historia nueva: confirmá en qué épica/sprint del documento oficial estás parado. No implementes Epic 2+ sin haber cerrado Epic 1 (todo lo nuevo depende de que exista `gymId`).
+- **Completo**: identidad (auth, usuarios, roles) y **Epic 0 · Hardening** (migraciones, rate limiting, CORS, fix de roles).
+- **Completo**: **Epic 1 · Fundación multi-tenant** — entidad `Gym`, `User.gymId`, JWT con `gymId`, scoping por gimnasio en `Users`/`Admin`/`Gyms` (403, no 404, en cruces entre gimnasios), migración aplicada, tests unitarios + e2e de aislamiento.
+- **Siguiente en el roadmap**: Epic 2 (Membresías y facturación) → Epic 3 (Reservas) → Epic 4 (Operación del gimnasio) → Epic 5 (Observabilidad). Eso cierra **SmartBox v1.0**.
+- Antes de arrancar una historia nueva: confirmá en qué épica/sprint del documento oficial estás parado. Epic 2 requiere la sesión de scoping de billing (ver más abajo) antes de programar.
 
 ## Decisiones de alcance ya tomadas para v1.0 (no las reabras sin avisar)
 
@@ -43,6 +44,7 @@ Swagger en `/docs` (solo fuera de producción). Ver README para variables de ent
 - Nada de `console.log` — `Logger` de `@nestjs/common`.
 - Variable de entorno nueva → agregarla a `.env.example` **y** al schema de Joi (`src/config/env.validation.ts`); si no, el arranque no la valida.
 - Commits en este repo: **sin** el trailer `Co-Authored-By`.
+- Formato de mensajes de commit — [Conventional Commits](https://www.conventionalcommits.org/): `<tipo>(<alcance>): <descripción>`. Ej.: `feat(auth): add biometric login`, `fix(users): resolve pagination bug`. Tipos: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
 
 ## Definition of Done (aplica a toda historia, ver documento oficial §06 para el detalle completo)
 

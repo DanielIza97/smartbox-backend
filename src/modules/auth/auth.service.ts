@@ -53,6 +53,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role?.name,
+      gymId: user.gym?.id ?? null,
     };
 
     const token = await this.jwtService.signAsync(payload);
@@ -64,13 +65,20 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role?.name,
+        gymId: user.gym?.id ?? null,
       },
     };
   }
 
   // 2. REGISTRO
   async register(registerDto: Omit<RegisterDto, 'roleName'>) {
-    const { email, password, name } = registerDto;
+    const { email, password, name, gymId } = registerDto;
+
+    if (!gymId) {
+      throw new BadRequestException(
+        'gymId es obligatorio para registrarse: elegí el gimnasio al que te unís.',
+      );
+    }
 
     const userExists = await this.usersService.findByEmail(email);
     if (userExists) {
@@ -96,6 +104,7 @@ export class AuthService {
       email,
       password: hashedPassword,
       roleId: defaultRole.id,
+      gymId,
     });
 
     return {
@@ -112,7 +121,7 @@ export class AuthService {
 
   // 3. REGISTRO INTERNO
   async registerInternal(registerDto: RegisterDto) {
-    const { email, password, name, roleName } = registerDto;
+    const { email, password, name, roleName, gymId } = registerDto;
 
     if (!roleName) {
       throw new BadRequestException(
@@ -136,6 +145,12 @@ export class AuthService {
       );
     }
 
+    if (role.name !== 'SUPER_ADMIN' && !gymId) {
+      throw new BadRequestException(
+        `gymId es obligatorio para el rol ${role.name}.`,
+      );
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -144,6 +159,7 @@ export class AuthService {
       email,
       password: hashedPassword,
       roleId: role.id,
+      gymId: role.name === 'SUPER_ADMIN' ? undefined : gymId,
     });
 
     return {

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { RolesService } from '../roles/roles.service';
+import { AuthenticatedUser } from '../auth/types/auth.types';
 
 @Injectable()
 export class AdminService {
@@ -9,10 +10,11 @@ export class AdminService {
     private readonly rolesService: RolesService,
   ) {}
 
-  // Resumen de sistema para el panel de administración: totales y usuarios por rol.
-  async getDashboardSummary() {
+  // Resumen para el panel de administración: totales y usuarios por rol.
+  // Scopeado al gimnasio del solicitante (ADMIN); SUPER_ADMIN ve todo el sistema.
+  async getDashboardSummary(requester: AuthenticatedUser) {
     const [users, roles] = await Promise.all([
-      this.usersService.findAll(),
+      this.usersService.findAll(requester),
       this.rolesService.findAll(),
     ]);
 

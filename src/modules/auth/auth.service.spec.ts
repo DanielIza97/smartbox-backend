@@ -69,6 +69,7 @@ describe('AuthService', () => {
         name: 'Demo',
         password: hashedPassword,
         role: { name: 'CLIENT' },
+        gym: { id: 'gym-1' },
       });
 
       const result = await authService.login(
@@ -82,6 +83,7 @@ describe('AuthService', () => {
         email: 'demo@smartbox.com',
         name: 'Demo',
         role: 'CLIENT',
+        gymId: 'gym-1',
       });
     });
 
@@ -126,14 +128,28 @@ describe('AuthService', () => {
         name: 'Nuevo',
         email: 'nuevo@smartbox.com',
         password: 'contraseña123',
+        gymId: 'gym-1',
       });
 
       expect(roleRepository.findOne).toHaveBeenCalledWith({
         where: { name: 'CLIENT' },
       });
       expect(usersService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ roleId: 'role-client-uuid' }),
+        expect.objectContaining({
+          roleId: 'role-client-uuid',
+          gymId: 'gym-1',
+        }),
       );
+    });
+
+    it('lanza BadRequestException si no se envía gymId', async () => {
+      await expect(
+        authService.register({
+          name: 'Sin gym',
+          email: 'singym@smartbox.com',
+          password: 'contraseña123',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('lanza BadRequestException si el correo ya está registrado', async () => {
@@ -144,6 +160,7 @@ describe('AuthService', () => {
           name: 'Dup',
           email: 'dup@smartbox.com',
           password: 'contraseña123',
+          gymId: 'gym-1',
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -157,6 +174,7 @@ describe('AuthService', () => {
           name: 'Nuevo',
           email: 'nuevo@smartbox.com',
           password: 'contraseña123',
+          gymId: 'gym-1',
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -185,6 +203,48 @@ describe('AuthService', () => {
           roleName: 'ADMIN',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('lanza BadRequestException si el rol no es SUPER_ADMIN y no se envía gymId', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-admin',
+        name: 'ADMIN',
+      });
+
+      await expect(
+        authService.registerInternal({
+          name: 'Interno',
+          email: 'interno@smartbox.com',
+          password: 'contraseña123',
+          roleName: 'ADMIN',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('permite crear un SUPER_ADMIN sin gymId', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-super',
+        name: 'SUPER_ADMIN',
+      });
+      usersService.create.mockResolvedValue({
+        id: 'user-3',
+        name: 'Super',
+        email: 'super@smartbox.com',
+        status: 'active',
+      });
+
+      await authService.registerInternal({
+        name: 'Super',
+        email: 'super@smartbox.com',
+        password: 'contraseña123',
+        roleName: 'SUPER_ADMIN',
+      });
+
+      expect(usersService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ roleId: 'role-super', gymId: undefined }),
+      );
     });
   });
 });

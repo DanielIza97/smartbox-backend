@@ -16,4 +16,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUUID()
   roleId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'UUID del gimnasio al que pertenece (solo SUPER_ADMIN puede reasignarlo)',
+  })
+  @IsOptional()
+  @IsUUID()
+  gymId?: string;
 }

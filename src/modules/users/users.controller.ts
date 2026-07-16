@@ -33,7 +33,12 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   @Post()
-  create(@Body() dto: CreateUserDto) {
+  create(@Body() dto: CreateUserDto, @Request() req: RequestWithUser) {
+    const requester = req.user!;
+    // Un ADMIN solo puede crear usuarios dentro de su propio gimnasio.
+    if (requester.role !== 'SUPER_ADMIN') {
+      dto.gymId = requester.gymId ?? undefined;
+    }
     return this.usersService.create(dto);
   }
 
@@ -42,8 +47,12 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateDto: UpdateUserDto) {
-    return this.usersService.update(id, updateDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateUserDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.usersService.update(id, updateDto, req.user!);
   }
 
   @ApiOperation({
@@ -56,7 +65,7 @@ export class UsersController {
     @Request() req: RequestWithUser,
     @Body() dto: UpdateProfileDto,
   ) {
-    return this.usersService.update(req.user!.id, dto);
+    return this.usersService.update(req.user!.id, dto, req.user!);
   }
 
   @ApiOperation({ summary: 'Eliminar un usuario' })
@@ -65,17 +74,19 @@ export class UsersController {
   @Roles('SUPER_ADMIN', 'ADMIN')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id') id: string) {
-    await this.usersService.remove(id);
+  async remove(@Param('id') id: string, @Request() req: RequestWithUser) {
+    await this.usersService.remove(id, req.user!);
   }
 
-  @ApiOperation({ summary: 'Listar todos los usuarios' })
+  @ApiOperation({
+    summary: 'Listar usuarios (ADMIN/STAFF ven solo su gimnasio)',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'STAFF')
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@Request() req: RequestWithUser) {
+    return this.usersService.findAll(req.user!);
   }
 
   @ApiOperation({ summary: 'Obtener un usuario por id' })
@@ -83,8 +94,8 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'STAFF')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: RequestWithUser) {
+    return this.usersService.findOneScoped(id, req.user!);
   }
 
   @ApiOperation({

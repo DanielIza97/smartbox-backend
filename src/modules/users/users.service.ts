@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,23 +11,57 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { MailService } from '../mail/mail.service';
 import { TokenService } from '../../common/token/token.service';
+import { Role } from '../roles/entities/role.entity';
+import { Gym } from '../gyms/entities/gym.entity';
+import { AuthenticatedUser } from '../auth/types/auth.types';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
+    @InjectRepository(Gym)
+    private readonly gymRepository: Repository<Gym>,
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
   ) {}
 
-  // 1. Crear un usuario vinculando su Rol por ID
+  // 1. Crear un usuario vinculando su Rol y su Gimnasio
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const { roleId, ...userData } = createUserDto;
+    const { roleId, gymId, ...userData } = createUserDto;
+
+    const role = await this.roleRepository.findOne({
+      where: { id: roleId },
+    });
+    if (!role) {
+      throw new BadRequestException('El rol especificado no es válido.');
+    }
+
+    if (role.name === 'SUPER_ADMIN') {
+      if (gymId) {
+        throw new BadRequestException(
+          'Un SUPER_ADMIN no pertenece a ningún gimnasio.',
+        );
+      }
+    } else if (!gymId) {
+      throw new BadRequestException(
+        `gymId es obligatorio para el rol ${role.name}.`,
+      );
+    }
+
+    if (gymId) {
+      const gym = await this.gymRepository.findOne({ where: { id: gymId } });
+      if (!gym) {
+        throw new NotFoundException('El gimnasio especificado no existe.');
+      }
+    }
 
     const newUser = this.userRepository.create({
       ...userData,
       role: { id: roleId },
+      gym: gymId ? { id: gymId } : null,
       status: 'active',
     });
 
@@ -34,15 +69,22 @@ export class UsersService {
       return await this.userRepository.save(newUser);
     } catch {
       throw new BadRequestException(
-        'No se pudo crear el usuario. Verifica que el Rol sea válido.',
+        'No se pudo crear el usuario. Verifica los datos ingresados.',
       );
     }
   }
 
-  // 2. Listar todos los usuarios
-  async findAll(): Promise<User[]> {
+  // 2. Listar usuarios — SUPER_ADMIN ve todos, el resto solo su propio gimnasio
+  async findAll(requester: AuthenticatedUser): Promise<User[]> {
+    if (requester.role === 'SUPER_ADMIN') {
+      return await this.userRepository.find({
+        relations: { role: true, gym: true },
+      });
+    }
+
     return await this.userRepository.find({
-      relations: { role: true },
+      where: { gym: { id: requester.gymId ?? '' } },
+      relations: { role: true, gym: true },
     });
   }
 
@@ -51,16 +93,17 @@ export class UsersService {
     return await this.userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.role', 'role')
+      .leftJoinAndSelect('user.gym', 'gym')
       .addSelect('user.password')
       .where('user.email = :email', { email })
       .getOne();
   }
 
-  // 4. Buscar un único usuario por su ID
+  // 4. Buscar un único usuario por su ID, sin chequeo de pertenencia (uso interno)
   async findOne(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: { role: true },
+      relations: { role: true, gym: true },
     });
 
     if (!user) {
@@ -68,6 +111,23 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  // 4b. Buscar un usuario por ID validando que el solicitante tenga acceso
+  // (mismo gimnasio, o SUPER_ADMIN). 403, no 404, si existe en otro gimnasio.
+  async findOneScoped(id: string, requester: AuthenticatedUser): Promise<User> {
+    const user = await this.findOne(id);
+    this.assertSameGym(user, requester);
+    return user;
+  }
+
+  private assertSameGym(user: User, requester: AuthenticatedUser): void {
+    if (requester.role === 'SUPER_ADMIN') {
+      return;
+    }
+    if (user.gym?.id !== requester.gymId) {
+      throw new ForbiddenException('No tenés acceso a este usuario.');
+    }
   }
 
   // 5. Guardar el token de recuperación y su fecha de expiración
@@ -105,21 +165,32 @@ export class UsersService {
   }
 
   // 8. Editar Usuario
-  async update(id: string, updateData: UpdateUserDto): Promise<User> {
-    const user = await this.findOne(id);
-    const { roleId, ...rest } = updateData;
+  async update(
+    id: string,
+    updateData: UpdateUserDto,
+    requester: AuthenticatedUser,
+  ): Promise<User> {
+    const user = await this.findOneScoped(id, requester);
+    const { roleId, gymId, ...rest } = updateData;
+
+    if (gymId && requester.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Solo un SUPER_ADMIN puede reasignar el gimnasio de un usuario.',
+      );
+    }
 
     const updatedUser = this.userRepository.merge(user, {
       ...rest,
       role: roleId ? { id: roleId } : user.role,
+      gym: gymId ? { id: gymId } : user.gym,
     });
 
     return await this.userRepository.save(updatedUser);
   }
 
   // 8b. Eliminar usuario
-  async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
+  async remove(id: string, requester: AuthenticatedUser): Promise<void> {
+    const user = await this.findOneScoped(id, requester);
     await this.userRepository.remove(user);
   }
 
