@@ -94,6 +94,23 @@ describe('Rutas protegidas (e2e, sin base de datos)', () => {
     });
   });
 
+  describe('PATCH /users/me', () => {
+    it('devuelve 401 sin token', () => {
+      return request(app.getHttpServer())
+        .patch('/users/me')
+        .send({ name: 'x' })
+        .expect(401);
+    });
+
+    it('devuelve 200 con cualquier rol autenticado (CLIENT incluido)', () => {
+      return request(app.getHttpServer())
+        .patch('/users/me')
+        .set('Authorization', `Bearer ${tokenFor('CLIENT')}`)
+        .send({ name: 'Nuevo Nombre' })
+        .expect(200);
+    });
+  });
+
   describe('DELETE /users/:id', () => {
     it('devuelve 401 sin token', () => {
       return request(app.getHttpServer()).delete('/users/some-id').expect(401);

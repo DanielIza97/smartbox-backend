@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Put,
+  Patch,
   Delete,
   HttpCode,
   HttpStatus,
@@ -16,6 +17,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -42,6 +44,19 @@ export class UsersController {
   @Put(':id')
   update(@Param('id') id: string, @Body() updateDto: UpdateUserDto) {
     return this.usersService.update(id, updateDto);
+  }
+
+  @ApiOperation({
+    summary: 'Editar el propio nombre (cualquier usuario autenticado)',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateOwnProfile(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.usersService.update(req.user!.id, dto);
   }
 
   @ApiOperation({ summary: 'Eliminar un usuario' })
