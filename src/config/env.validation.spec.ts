@@ -5,6 +5,7 @@ interface ValidatedEnv {
   PORT: number;
   JWT_EXPIRES: string;
   DATABASE_PORT: number;
+  CORS_ORIGINS: string;
 }
 
 describe('envValidationSchema', () => {
@@ -33,6 +34,7 @@ describe('envValidationSchema', () => {
     expect(value.PORT).toBe(3000);
     expect(value.JWT_EXPIRES).toBe('1h');
     expect(value.DATABASE_PORT).toBe(5432);
+    expect(value.CORS_ORIGINS).toBe('http://localhost:3000');
   });
 
   it('falla si falta DATABASE_HOST', () => {

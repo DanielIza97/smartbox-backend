@@ -30,4 +30,7 @@ export const envValidationSchema = Joi.object({
   MAILTRAP_FROM_NAME: Joi.string().optional(),
 
   FRONTEND_URL: Joi.string().uri().optional(),
+
+  // Orígenes permitidos por CORS, separados por comas (p. ej. "http://localhost:3000,https://admin.smartbox.com").
+  CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
 }).unknown(true);

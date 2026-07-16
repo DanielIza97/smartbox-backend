@@ -24,7 +24,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
         autoLoadEntities: true,
 
-        synchronize: true,
+        // El esquema se versiona con migraciones (src/database/migrations),
+        // no con auto-sync — correlo con `npm run migration:run`.
+        synchronize: false,
+        migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        migrationsRun: false,
       }),
     }),
   ],

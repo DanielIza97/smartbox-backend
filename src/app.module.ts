@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { DatabaseModule } from './database/database.module';
 import { envValidationSchema } from './config/env.validation';
@@ -20,6 +22,15 @@ import { AdminModule } from './modules/admin/admin.module';
       validationOptions: { abortEarly: false },
     }),
 
+    // Rate limiting: límite general por defecto; los endpoints sensibles
+    // (login, forgot-password, register) se acotan más con @Throttle().
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 100,
+      },
+    ]),
+
     // DB
     DatabaseModule,
 
@@ -28,6 +39,12 @@ import { AdminModule } from './modules/admin/admin.module';
     UsersModule,
     RolesModule,
     AdminModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

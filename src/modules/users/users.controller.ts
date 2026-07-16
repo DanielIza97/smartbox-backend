@@ -91,8 +91,7 @@ export class UsersController {
     summary: 'Solicitar cambio del propio correo (usuario autenticado)',
   })
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'USER')
+  @UseGuards(JwtAuthGuard)
   @Post('request-email-change')
   async requestEmailChange(
     @Request() req: RequestWithUser,

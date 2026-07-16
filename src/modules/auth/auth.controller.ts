@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -25,6 +26,7 @@ export class AuthController {
 
   // 1. LOGIN
   @ApiOperation({ summary: 'Iniciar sesión con email y contraseña' })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto.email, loginDto.password);
@@ -32,6 +34,7 @@ export class AuthController {
 
   // 2. REGISTRO PÚBLICO (Cualquier usuario final se registra solo)
   @ApiOperation({ summary: 'Registro público (rol CLIENT por defecto)' })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
@@ -51,6 +54,7 @@ export class AuthController {
 
   // 4. SOLICITAR ENLACE DE RECUPERACIÓN (Olvido de contraseña)
   @ApiOperation({ summary: 'Solicitar enlace de recuperación de contraseña' })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK) // Cambia el código por defecto (201) a 200 OK
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
@@ -61,6 +65,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Restablecer contraseña con el token recibido por correo',
   })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
