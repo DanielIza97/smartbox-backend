@@ -151,7 +151,10 @@ export class ReservationsService {
     }
 
     await this.reservationRepository.update(id, { status: 'cancelled' });
-    return await this.reservationRepository.findOneOrFail({ where: { id } });
+    return await this.reservationRepository.findOneOrFail({
+      where: { id },
+      relations: { classOrResource: true },
+    });
   }
 
   // Barrido de expiración (E3-04) — las reservas confirmed cuyo horario ya

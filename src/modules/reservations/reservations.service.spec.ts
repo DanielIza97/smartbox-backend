@@ -298,6 +298,13 @@ describe('ReservationsService', () => {
       expect(reservationRepository.update).toHaveBeenCalledWith('res-1', {
         status: 'cancelled',
       });
+      // La clase tiene que venir en la respuesta (mismo bug que se encontró
+      // en MembershipsService.requestCancellation: el findOneOrFail final
+      // sin relations dejaba al frontend sin el nombre de la clase).
+      expect(reservationRepository.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 'res-1' },
+        relations: { classOrResource: true },
+      });
     });
 
     it('permite a un ADMIN del mismo gym cancelar la reserva de un socio', async () => {
