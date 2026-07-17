@@ -23,6 +23,7 @@ describe('Guards en POST /memberships/subscribe (e2e, sin base de datos ni Merca
       checkoutUrl: 'https://mercadopago.com/checkout/xyz',
     }),
     handleWebhook: jest.fn().mockResolvedValue(undefined),
+    requestCancellation: jest.fn(),
   };
 
   const tokenFor = (role: string, gymId: string | null) =>
@@ -80,6 +81,7 @@ describe('POST /memberships/webhook/mercadopago (e2e, sin base de datos ni Merca
   const membershipsServiceMock = {
     subscribe: jest.fn(),
     handleWebhook: jest.fn().mockResolvedValue(undefined),
+    requestCancellation: jest.fn(),
   };
 
   beforeAll(async () => {
@@ -135,5 +137,68 @@ describe('POST /memberships/webhook/mercadopago (e2e, sin base de datos ni Merca
       .post('/memberships/webhook/mercadopago?data.id=preapproval-1')
       .send({ id: 42, type: 'subscription_preapproval' })
       .expect(401);
+  });
+});
+
+describe('POST /memberships/:id/cancel (e2e, sin base de datos ni Mercado Pago)', () => {
+  let app: INestApplication<App>;
+  const jwtService = new JwtService({ secret: process.env.JWT_SECRET });
+
+  const membershipsServiceMock = {
+    subscribe: jest.fn(),
+    handleWebhook: jest.fn(),
+    requestCancellation: jest.fn().mockResolvedValue({
+      id: 'membership-1',
+      cancelAtPeriodEnd: true,
+    }),
+  };
+
+  const tokenFor = (role: string, gymId: string | null) =>
+    jwtService.sign({ sub: 'u1', email: 'user@smartbox.com', role, gymId });
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [PassportModule],
+      controllers: [MembershipsController],
+      providers: [
+        Reflector,
+        JwtStrategy,
+        JwtAuthGuard,
+        RolesGuard,
+        { provide: MembershipsService, useValue: membershipsServiceMock },
+      ],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('devuelve 401 sin token', () => {
+    return request(app.getHttpServer())
+      .post('/memberships/membership-1/cancel')
+      .expect(401);
+  });
+
+  it('devuelve 403 para roles distintos de CLIENT/ADMIN/SUPER_ADMIN', () => {
+    return request(app.getHttpServer())
+      .post('/memberships/membership-1/cancel')
+      .set('Authorization', `Bearer ${tokenFor('STAFF', 'gym-a')}`)
+      .expect(403);
+  });
+
+  it('devuelve 200 para un CLIENT autenticado', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/memberships/membership-1/cancel')
+      .set('Authorization', `Bearer ${tokenFor('CLIENT', 'gym-a')}`)
+      .expect(200);
+
+    expect(res.body).toEqual({
+      id: 'membership-1',
+      cancelAtPeriodEnd: true,
+    });
   });
 });

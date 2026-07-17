@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -7,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { In, LessThanOrEqual, Repository } from 'typeorm';
 import { WebhookSignatureValidator } from 'mercadopago';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
@@ -180,6 +182,96 @@ export class MembershipsService {
     const subscription = await client.subscriptions.get({ id: dataId });
 
     await this.syncMembershipFromPreapproval(subscription);
+  }
+
+  // Cancelación "hasta fin del período pagado" (sesión de scoping de
+  // billing) — Mercado Pago no tiene un cancel_at_period_end nativo como
+  // Stripe, así que lo simulamos a nivel de aplicación: acá solo marcamos
+  // la intención; la cancelación real en Mercado Pago recién ocurre cuando
+  // vence currentPeriodEnd (ver processScheduledCancellations más abajo).
+  async requestCancellation(
+    membershipId: string,
+    requester: AuthenticatedUser,
+  ): Promise<Membership> {
+    const membership = await this.membershipRepository.findOne({
+      where: { id: membershipId },
+      relations: { plan: true },
+    });
+    if (!membership) {
+      throw new NotFoundException('Membresía no encontrada.');
+    }
+
+    const isOwner = membership.userId === requester.id;
+    const isGymAdmin =
+      requester.role === 'SUPER_ADMIN' ||
+      (requester.role === 'ADMIN' && membership.plan.gymId === requester.gymId);
+    if (!isOwner && !isGymAdmin) {
+      throw new ForbiddenException('No tenés acceso a esta membresía.');
+    }
+
+    if (membership.status !== 'active') {
+      throw new BadRequestException('Esta membresía no está activa.');
+    }
+    if (membership.cancelAtPeriodEnd) {
+      throw new BadRequestException(
+        'Esta membresía ya tiene una cancelación pendiente.',
+      );
+    }
+
+    await this.membershipRepository.update(membership.id, {
+      cancelAtPeriodEnd: true,
+    });
+    return await this.membershipRepository.findOneOrFail({
+      where: { id: membership.id },
+    });
+  }
+
+  // Barrido diario: efectiviza en Mercado Pago las cancelaciones pedidas
+  // cuyo período pagado ya venció. Si la cancelación remota falla, deja
+  // cancelAtPeriodEnd=true para reintentar en el próximo barrido en vez de
+  // perder el pedido silenciosamente.
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async processScheduledCancellations(): Promise<void> {
+    const due = await this.membershipRepository.find({
+      where: {
+        cancelAtPeriodEnd: true,
+        status: 'active',
+        currentPeriodEnd: LessThanOrEqual(new Date()),
+      },
+      relations: { plan: true },
+    });
+
+    for (const membership of due) {
+      await this.finalizeCancellation(membership);
+    }
+  }
+
+  private async finalizeCancellation(membership: Membership): Promise<void> {
+    if (!membership.mercadoPagoPreapprovalId) {
+      await this.membershipRepository.update(membership.id, {
+        status: 'cancelled',
+      });
+      return;
+    }
+
+    try {
+      const accessToken = await this.gymsService.getMercadoPagoAccessToken(
+        membership.plan.gymId,
+      );
+      const client = this.mercadoPagoService.clientFor(accessToken);
+      await client.subscriptions.update({
+        id: membership.mercadoPagoPreapprovalId,
+        body: { status: 'cancelled' },
+      });
+      await this.membershipRepository.update(membership.id, {
+        status: 'cancelled',
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo cancelar la membresía ${membership.id} en Mercado Pago — se reintenta en el próximo barrido.`,
+        error,
+      );
+    }
   }
 
   private verifySignature(

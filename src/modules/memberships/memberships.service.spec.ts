@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -32,6 +33,8 @@ describe('MembershipsService', () => {
   let service: MembershipsService;
   let membershipRepository: {
     findOne: jest.Mock;
+    findOneOrFail: jest.Mock;
+    find: jest.Mock;
     update: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
@@ -45,7 +48,11 @@ describe('MembershipsService', () => {
     findByMercadoPagoUserId: jest.Mock;
   };
   let configService: { get: jest.Mock; getOrThrow: jest.Mock };
-  let subscriptionsApiMock: { create: jest.Mock; get: jest.Mock };
+  let subscriptionsApiMock: {
+    create: jest.Mock;
+    get: jest.Mock;
+    update: jest.Mock;
+  };
 
   const client: AuthenticatedUser = {
     id: 'client-1',
@@ -57,6 +64,8 @@ describe('MembershipsService', () => {
   beforeEach(async () => {
     membershipRepository = {
       findOne: jest.fn(),
+      findOneOrFail: jest.fn(),
+      find: jest.fn(),
       update: jest.fn(),
       create: jest.fn((data: object) => data),
       save: jest.fn((data: object) => Promise.resolve(data)),
@@ -69,6 +78,7 @@ describe('MembershipsService', () => {
         .fn()
         .mockResolvedValue({ init_point: 'https://mercadopago.com/xyz' }),
       get: jest.fn(),
+      update: jest.fn().mockResolvedValue({}),
     };
     mercadoPagoService = {
       clientFor: jest
@@ -366,6 +376,162 @@ describe('MembershipsService', () => {
       expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
         status: 'cancelled',
       });
+    });
+  });
+
+  describe('requestCancellation', () => {
+    it('lanza NotFoundException si la membresía no existe', async () => {
+      membershipRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.requestCancellation('membership-x', client),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rechaza si el solicitante no es el dueño ni ADMIN del gym', async () => {
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        userId: 'other-client',
+        status: 'active',
+        cancelAtPeriodEnd: false,
+        plan: { gymId: 'gym-b' },
+      });
+
+      await expect(
+        service.requestCancellation('membership-1', client),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('permite al dueño cancelar su propia membresía', async () => {
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        userId: 'client-1',
+        status: 'active',
+        cancelAtPeriodEnd: false,
+        plan: { gymId: 'gym-a' },
+      });
+      membershipRepository.findOneOrFail.mockResolvedValue({
+        id: 'membership-1',
+        cancelAtPeriodEnd: true,
+      });
+
+      await service.requestCancellation('membership-1', client);
+
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        cancelAtPeriodEnd: true,
+      });
+    });
+
+    it('permite a un ADMIN del mismo gym cancelar la membresía de un socio', async () => {
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        userId: 'other-client',
+        status: 'active',
+        cancelAtPeriodEnd: false,
+        plan: { gymId: 'gym-a' },
+      });
+      membershipRepository.findOneOrFail.mockResolvedValue({
+        id: 'membership-1',
+        cancelAtPeriodEnd: true,
+      });
+
+      const admin: AuthenticatedUser = {
+        id: 'admin-1',
+        email: 'admin@smartbox.com',
+        role: 'ADMIN',
+        gymId: 'gym-a',
+      };
+
+      await service.requestCancellation('membership-1', admin);
+
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        cancelAtPeriodEnd: true,
+      });
+    });
+
+    it('rechaza si la membresía ya no está active', async () => {
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        userId: 'client-1',
+        status: 'cancelled',
+        cancelAtPeriodEnd: false,
+        plan: { gymId: 'gym-a' },
+      });
+
+      await expect(
+        service.requestCancellation('membership-1', client),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rechaza si ya hay una cancelación pendiente', async () => {
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        userId: 'client-1',
+        status: 'active',
+        cancelAtPeriodEnd: true,
+        plan: { gymId: 'gym-a' },
+      });
+
+      await expect(
+        service.requestCancellation('membership-1', client),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('processScheduledCancellations', () => {
+    it('cancela en Mercado Pago y localmente las membresías vencidas con cancelación pendiente', async () => {
+      membershipRepository.find.mockResolvedValue([
+        {
+          id: 'membership-1',
+          mercadoPagoPreapprovalId: 'preapproval-1',
+          plan: { gymId: 'gym-a' },
+        },
+      ]);
+
+      await service.processScheduledCancellations();
+
+      expect(gymsService.getMercadoPagoAccessToken).toHaveBeenCalledWith(
+        'gym-a',
+      );
+      expect(subscriptionsApiMock.update).toHaveBeenCalledWith({
+        id: 'preapproval-1',
+        body: { status: 'cancelled' },
+      });
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        status: 'cancelled',
+      });
+    });
+
+    it('cancela localmente sin llamar a Mercado Pago si no hay preapproval asociado', async () => {
+      membershipRepository.find.mockResolvedValue([
+        {
+          id: 'membership-1',
+          mercadoPagoPreapprovalId: null,
+          plan: { gymId: 'gym-a' },
+        },
+      ]);
+
+      await service.processScheduledCancellations();
+
+      expect(subscriptionsApiMock.update).not.toHaveBeenCalled();
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        status: 'cancelled',
+      });
+    });
+
+    it('deja cancelAtPeriodEnd sin tocar si falla la cancelación remota, para reintentar', async () => {
+      membershipRepository.find.mockResolvedValue([
+        {
+          id: 'membership-1',
+          mercadoPagoPreapprovalId: 'preapproval-1',
+          plan: { gymId: 'gym-a' },
+        },
+      ]);
+      subscriptionsApiMock.update.mockRejectedValue(new Error('mp down'));
+
+      await service.processScheduledCancellations();
+
+      expect(membershipRepository.update).not.toHaveBeenCalled();
     });
   });
 });

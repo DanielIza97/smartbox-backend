@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import { DatabaseModule } from './database/database.module';
 import { envValidationSchema } from './config/env.validation';
@@ -33,6 +34,10 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
         limit: 100,
       },
     ]),
+
+    // Cron para tareas programadas (barrido de cancelaciones al vencer el
+    // período — E2-04, ver MembershipsService).
+    ScheduleModule.forRoot(),
 
     // DB
     DatabaseModule,

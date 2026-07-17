@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Headers,
+  Param,
   Post,
   Query,
   Request,
@@ -38,6 +39,19 @@ export class MembershipsController {
   @Post('subscribe')
   subscribe(@Request() req: RequestWithUser) {
     return this.membershipsService.subscribe(req.user!);
+  }
+
+  @ApiOperation({
+    summary:
+      'Cancelar una membresía — conserva acceso hasta el fin del período ya pagado',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT', 'ADMIN', 'SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string, @Request() req: RequestWithUser) {
+    return this.membershipsService.requestCancellation(id, req.user!);
   }
 
   // Pública — sin JWT, la seguridad depende de la verificación de firma
