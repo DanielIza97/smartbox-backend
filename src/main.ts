@@ -1,3 +1,7 @@
+// Primera línea del archivo, antes que cualquier otro import — Sentry
+// necesita instrumentar el resto de la app antes de que se cargue (E5-03).
+import './instrument';
+
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

@@ -47,4 +47,9 @@ export const envValidationSchema = Joi.object({
   // "Secret signature" de la app, configurada en Tus Integraciones →
   // Webhooks. Se usa para verificar la firma de POST /memberships/webhook/mercadopago.
   MERCADOPAGO_WEBHOOK_SECRET: Joi.string().required(),
+
+  // Si se omite, Sentry.init() (src/instrument.ts) no envía nada — mismo
+  // patrón que MAILTRAP_API_KEY, no hace falta cuenta de Sentry para
+  // desarrollar local (E5-03).
+  SENTRY_DSN: Joi.string().allow('').optional(),
 }).unknown(true);
