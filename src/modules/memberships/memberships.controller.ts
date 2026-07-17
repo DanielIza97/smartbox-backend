@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Headers,
@@ -39,6 +40,28 @@ export class MembershipsController {
   @Post('subscribe')
   subscribe(@Request() req: RequestWithUser) {
     return this.membershipsService.subscribe(req.user!);
+  }
+
+  @ApiOperation({
+    summary: 'Ver el estado de mi propia membresía (E2-07)',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Get('me')
+  findMyMembership(@Request() req: RequestWithUser) {
+    return this.membershipsService.findMyMembership(req.user!);
+  }
+
+  @ApiOperation({
+    summary: 'Ver mi propio historial de facturas (E2-07)',
+  })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CLIENT')
+  @Get('me/invoices')
+  findMyInvoices(@Request() req: RequestWithUser) {
+    return this.membershipsService.findMyInvoices(req.user!);
   }
 
   @ApiOperation({

@@ -137,6 +137,37 @@ export class MembershipsService {
     }
   }
 
+  // E2-07: autogestión de solo lectura — Mercado Pago no tiene un Customer
+  // Portal hosted por-comercio como Stripe, así que en vez de linkear a un
+  // portal, el socio ve su estado desde acá y gestiona tarjeta/cancelación
+  // de suscripción directamente en su propia cuenta de Mercado Pago (débitos
+  // automáticos). Cancelar sigue siendo POST /memberships/:id/cancel (E2-04).
+  async findMyMembership(requester: AuthenticatedUser): Promise<Membership> {
+    const membership = await this.membershipRepository.findOne({
+      where: { userId: requester.id },
+      relations: { plan: true },
+      order: { createdAt: 'DESC' },
+    });
+    if (!membership) {
+      throw new NotFoundException('Todavía no tenés una membresía.');
+    }
+    return membership;
+  }
+
+  async findMyInvoices(requester: AuthenticatedUser): Promise<Invoice[]> {
+    const memberships = await this.membershipRepository.find({
+      where: { userId: requester.id },
+    });
+    if (memberships.length === 0) {
+      return [];
+    }
+
+    return this.invoiceRepository.find({
+      where: { membershipId: In(memberships.map((m) => m.id)) },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   // Webhook de Mercado Pago: verifica firma, deduplica por notification id
   // (INSERT con PK única — no "leer y después insertar", para no dejar una
   // carrera entre notificaciones concurrentes), y sincroniza el estado de

@@ -24,6 +24,8 @@ describe('Guards en POST /memberships/subscribe (e2e, sin base de datos ni Merca
     }),
     handleWebhook: jest.fn().mockResolvedValue(undefined),
     requestCancellation: jest.fn(),
+    findMyMembership: jest.fn(),
+    findMyInvoices: jest.fn(),
   };
 
   const tokenFor = (role: string, gymId: string | null) =>
@@ -72,6 +74,99 @@ describe('Guards en POST /memberships/subscribe (e2e, sin base de datos ni Merca
     expect(res.body).toEqual({
       checkoutUrl: 'https://mercadopago.com/checkout/xyz',
     });
+  });
+});
+
+describe('GET /memberships/me y /memberships/me/invoices (e2e, sin base de datos ni Mercado Pago)', () => {
+  let app: INestApplication<App>;
+  const jwtService = new JwtService({ secret: process.env.JWT_SECRET });
+
+  const membershipsServiceMock = {
+    subscribe: jest.fn(),
+    handleWebhook: jest.fn(),
+    requestCancellation: jest.fn(),
+    findMyMembership: jest.fn().mockResolvedValue({
+      id: 'membership-1',
+      status: 'active',
+      plan: { id: 'plan-a', name: 'Plan Mensual' },
+    }),
+    findMyInvoices: jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'invoice-1', amountCents: 4999, status: 'approved' },
+      ]),
+  };
+
+  const tokenFor = (role: string, gymId: string | null) =>
+    jwtService.sign({ sub: 'u1', email: 'user@smartbox.com', role, gymId });
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [PassportModule],
+      controllers: [MembershipsController],
+      providers: [
+        Reflector,
+        JwtStrategy,
+        JwtAuthGuard,
+        RolesGuard,
+        { provide: MembershipsService, useValue: membershipsServiceMock },
+      ],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('GET /memberships/me devuelve 401 sin token', () => {
+    return request(app.getHttpServer()).get('/memberships/me').expect(401);
+  });
+
+  it('GET /memberships/me devuelve 403 para roles distintos de CLIENT', () => {
+    return request(app.getHttpServer())
+      .get('/memberships/me')
+      .set('Authorization', `Bearer ${tokenFor('ADMIN', 'gym-a')}`)
+      .expect(403);
+  });
+
+  it('GET /memberships/me devuelve 200 con la membresía del CLIENT autenticado', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/memberships/me')
+      .set('Authorization', `Bearer ${tokenFor('CLIENT', 'gym-a')}`)
+      .expect(200);
+
+    expect(res.body).toEqual({
+      id: 'membership-1',
+      status: 'active',
+      plan: { id: 'plan-a', name: 'Plan Mensual' },
+    });
+  });
+
+  it('GET /memberships/me/invoices devuelve 401 sin token', () => {
+    return request(app.getHttpServer())
+      .get('/memberships/me/invoices')
+      .expect(401);
+  });
+
+  it('GET /memberships/me/invoices devuelve 403 para roles distintos de CLIENT', () => {
+    return request(app.getHttpServer())
+      .get('/memberships/me/invoices')
+      .set('Authorization', `Bearer ${tokenFor('STAFF', 'gym-a')}`)
+      .expect(403);
+  });
+
+  it('GET /memberships/me/invoices devuelve 200 con las facturas del CLIENT autenticado', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/memberships/me/invoices')
+      .set('Authorization', `Bearer ${tokenFor('CLIENT', 'gym-a')}`)
+      .expect(200);
+
+    expect(res.body).toEqual([
+      { id: 'invoice-1', amountCents: 4999, status: 'approved' },
+    ]);
   });
 });
 

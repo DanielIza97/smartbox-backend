@@ -1,4 +1,5 @@
 import * as crypto from 'node:crypto';
+import { In } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -45,6 +46,7 @@ describe('MembershipsService', () => {
   let webhookEventRepository: { insert: jest.Mock };
   let invoiceRepository: {
     findOne: jest.Mock;
+    find: jest.Mock;
     update: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
@@ -83,6 +85,7 @@ describe('MembershipsService', () => {
     webhookEventRepository = { insert: jest.fn().mockResolvedValue(undefined) };
     invoiceRepository = {
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue(undefined),
       create: jest.fn((data: object) => data),
       save: jest.fn((data: object) => Promise.resolve(data)),
@@ -647,6 +650,70 @@ describe('MembershipsService', () => {
 
       expect(membershipRepository.findOne).not.toHaveBeenCalled();
       expect(membershipRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findMyMembership', () => {
+    it('lanza NotFoundException si el socio nunca tuvo una membresía', async () => {
+      membershipRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.findMyMembership(client)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('devuelve la membresía más reciente del solicitante, con el plan', async () => {
+      const membership = {
+        id: 'membership-1',
+        userId: 'client-1',
+        status: 'active',
+        plan: { id: 'plan-a', name: 'Plan Mensual' },
+      };
+      membershipRepository.findOne.mockResolvedValue(membership);
+
+      const result = await service.findMyMembership(client);
+
+      expect(membershipRepository.findOne).toHaveBeenCalledWith({
+        where: { userId: 'client-1' },
+        relations: { plan: true },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toBe(membership);
+    });
+  });
+
+  describe('findMyInvoices', () => {
+    it('devuelve un array vacío si el socio nunca tuvo una membresía', async () => {
+      membershipRepository.find.mockResolvedValue([]);
+
+      const result = await service.findMyInvoices(client);
+
+      expect(result).toEqual([]);
+      expect(invoiceRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('devuelve las facturas de todas las membresías del socio, más recientes primero', async () => {
+      membershipRepository.find.mockResolvedValue([
+        { id: 'membership-1' },
+        { id: 'membership-2' },
+      ]);
+      const invoices = [
+        { id: 'invoice-2', membershipId: 'membership-2' },
+        { id: 'invoice-1', membershipId: 'membership-1' },
+      ];
+      const invoiceFind = jest.fn().mockResolvedValue(invoices);
+      invoiceRepository.find = invoiceFind;
+
+      const result = await service.findMyInvoices(client);
+
+      expect(membershipRepository.find).toHaveBeenCalledWith({
+        where: { userId: 'client-1' },
+      });
+      expect(invoiceFind).toHaveBeenCalledWith({
+        where: { membershipId: In(['membership-1', 'membership-2']) },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toEqual(invoices);
     });
   });
 
