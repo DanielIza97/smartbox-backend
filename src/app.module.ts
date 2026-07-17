@@ -15,6 +15,8 @@ import { AdminModule } from './modules/admin/admin.module';
 import { GymsModule } from './modules/gyms/gyms.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
+import { ClassesModule } from './modules/classes/classes.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
     GymsModule,
     PlansModule,
     MembershipsModule,
+    ClassesModule,
+    ReservationsModule,
   ],
   providers: [
     {
