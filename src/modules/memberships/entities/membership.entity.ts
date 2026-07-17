@@ -45,10 +45,11 @@ export class Membership {
   })
   mercadoPagoPreapprovalId?: string | null;
 
-  @Column({ name: 'trial_ends_at', type: 'timestamp', nullable: true })
+  // timestamptz, no timestamp — ver la nota en Invoice.paidAt.
+  @Column({ name: 'trial_ends_at', type: 'timestamptz', nullable: true })
   trialEndsAt?: Date | null;
 
-  @Column({ name: 'current_period_end', type: 'timestamp', nullable: true })
+  @Column({ name: 'current_period_end', type: 'timestamptz', nullable: true })
   currentPeriodEnd?: Date | null;
 
   @Column({ name: 'cancel_at_period_end', default: false })

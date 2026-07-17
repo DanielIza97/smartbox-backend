@@ -17,6 +17,8 @@ import { PlansModule } from './modules/plans/plans.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
+import { ShiftsModule } from './modules/shifts/shifts.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
     MembershipsModule,
     ClassesModule,
     ReservationsModule,
+    ShiftsModule,
+    ReportsModule,
   ],
   providers: [
     {

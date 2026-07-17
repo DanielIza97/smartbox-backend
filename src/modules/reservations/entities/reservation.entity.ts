@@ -38,10 +38,11 @@ export class Reservation {
   @Column({ name: 'class_id' })
   classId!: string;
 
-  @Column({ name: 'start_at', type: 'timestamp' })
+  // timestamptz, no timestamp — ver la nota en Invoice.paidAt (CLAUDE.md).
+  @Column({ name: 'start_at', type: 'timestamptz' })
   startAt!: Date;
 
-  @Column({ name: 'end_at', type: 'timestamp' })
+  @Column({ name: 'end_at', type: 'timestamptz' })
   endAt!: Date;
 
   @Column({ type: 'varchar' })

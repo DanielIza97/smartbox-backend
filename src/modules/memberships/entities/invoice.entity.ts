@@ -46,7 +46,10 @@ export class Invoice {
   @Column({ name: 'mercadopago_payment_id', unique: true })
   mercadoPagoPaymentId!: string;
 
-  @Column({ name: 'paid_at', type: 'timestamp', nullable: true })
+  // timestamptz, no timestamp — un timestamp naive se malinterpreta al
+  // leerlo de vuelta si el proceso de Node corre en una timezone distinta
+  // a la del server de Postgres (ver CLAUDE.md).
+  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
   paidAt?: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })

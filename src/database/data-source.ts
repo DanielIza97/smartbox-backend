@@ -10,6 +10,7 @@ import { ProcessedWebhookEvent } from '../modules/memberships/entities/processed
 import { Invoice } from '../modules/memberships/entities/invoice.entity';
 import { ClassOrResource } from '../modules/classes/entities/class-or-resource.entity';
 import { Reservation } from '../modules/reservations/entities/reservation.entity';
+import { Shift } from '../modules/shifts/entities/shift.entity';
 
 // DataSource standalone para el CLI de TypeORM (migration:generate/run/revert).
 // No pasa por el ConfigModule de Nest — lee process.env directo (dotenv/config
@@ -31,6 +32,7 @@ export const AppDataSource = new DataSource({
     Invoice,
     ClassOrResource,
     Reservation,
+    Shift,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,
