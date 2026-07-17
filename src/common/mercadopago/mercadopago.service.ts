@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   MercadoPagoConfig,
   OAuth,
+  Payment,
   PreApproval,
   PreApprovalPlan,
 } from 'mercadopago';
@@ -10,6 +11,7 @@ import {
 export interface GymMercadoPagoClient {
   plans: PreApprovalPlan;
   subscriptions: PreApproval;
+  payments: Payment;
 }
 
 // Modelo Marketplace: SmartBox no cobra las membresías, cada gimnasio lo
@@ -67,6 +69,7 @@ export class MercadoPagoService {
     return {
       plans: new PreApprovalPlan(config),
       subscriptions: new PreApproval(config),
+      payments: new Payment(config),
     };
   }
 }

@@ -53,6 +53,7 @@ describe('MembershipsService', () => {
     get: jest.Mock;
     update: jest.Mock;
   };
+  let paymentsApiMock: { get: jest.Mock };
 
   const client: AuthenticatedUser = {
     id: 'client-1',
@@ -80,10 +81,12 @@ describe('MembershipsService', () => {
       get: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
     };
+    paymentsApiMock = { get: jest.fn() };
     mercadoPagoService = {
-      clientFor: jest
-        .fn()
-        .mockReturnValue({ subscriptions: subscriptionsApiMock }),
+      clientFor: jest.fn().mockReturnValue({
+        subscriptions: subscriptionsApiMock,
+        payments: paymentsApiMock,
+      }),
     };
     gymsService = {
       getMercadoPagoAccessToken: jest.fn().mockResolvedValue('gym-a-token'),
@@ -242,7 +245,7 @@ describe('MembershipsService', () => {
       expect(gymsService.findByMercadoPagoUserId).not.toHaveBeenCalled();
     });
 
-    it('ignora eventos que no son de preapproval (p. ej. payment) sin fallar', async () => {
+    it('ignora eventos que no son de preapproval ni de payment recurrente (p. ej. topic genérico payment) sin fallar', async () => {
       await service.handleWebhook(
         { id: 1, type: 'payment', data: { id: dataId }, user_id: 999 },
         {
@@ -376,6 +379,154 @@ describe('MembershipsService', () => {
       expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
         status: 'cancelled',
       });
+    });
+  });
+
+  describe('handleWebhook — dunning (subscription_authorized_payment)', () => {
+    const paymentDataId = 'payment-987';
+    const requestId = 'req-2';
+    const ts = 1700000001000;
+
+    it('consulta el Payment (no el PreApproval) y no toca la Membership si ya estaba active y el pago fue aprobado', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: paymentDataId,
+        status: 'approved',
+        external_reference: 'client-1',
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'active',
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(paymentsApiMock.get).toHaveBeenCalledWith({ id: paymentDataId });
+      expect(subscriptionsApiMock.get).not.toHaveBeenCalled();
+      expect(membershipRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('reactiva una Membership past_due cuando el pago recurrente es aprobado', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: paymentDataId,
+        status: 'approved',
+        external_reference: 'client-1',
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'past_due',
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(membershipRepository.update).toHaveBeenCalledWith(
+        'membership-1',
+        { status: 'active' },
+      );
+    });
+
+    it('marca la Membership como past_due cuando el pago recurrente es rechazado', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: paymentDataId,
+        status: 'rejected',
+        external_reference: 'client-1',
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'active',
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(membershipRepository.update).toHaveBeenCalledWith(
+        'membership-1',
+        { status: 'past_due' },
+      );
+    });
+
+    it('no hace nada si el pago rechazado no tiene una Membership active/past_due correlacionada', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: paymentDataId,
+        status: 'rejected',
+        external_reference: 'client-sin-membresia',
+      });
+      membershipRepository.findOne.mockResolvedValue(null);
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(membershipRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('no hace nada si el pago no trae external_reference', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: paymentDataId,
+        status: 'rejected',
+        external_reference: undefined,
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(membershipRepository.findOne).not.toHaveBeenCalled();
+      expect(membershipRepository.update).not.toHaveBeenCalled();
     });
   });
 

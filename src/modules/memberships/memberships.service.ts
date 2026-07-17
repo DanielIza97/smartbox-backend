@@ -25,6 +25,9 @@ import { AuthenticatedUser } from '../auth/types/auth.types';
 type PreApprovalDetails = Awaited<
   ReturnType<GymMercadoPagoClient['subscriptions']['get']>
 >;
+type PaymentDetails = Awaited<
+  ReturnType<GymMercadoPagoClient['payments']['get']>
+>;
 
 export interface MercadoPagoWebhookPayload {
   id?: number | string;
@@ -44,6 +47,14 @@ export interface MercadoPagoWebhookHeaders {
 // real todavía (queda pendiente verificarlo en sandbox), así que aceptamos
 // las variantes documentadas/conocidas en vez de una sola cadena fija.
 const PREAPPROVAL_WEBHOOK_TYPES = ['subscription_preapproval', 'preapproval'];
+
+// Eventos de cobro recurrente (dunning, E2-05) — confirmado contra la
+// documentación oficial de Mercado Pago: el topic es
+// `subscription_authorized_payment`, distinto del topic genérico `payment`
+// de pagos únicos. La cadencia/cantidad de reintentos automáticos de
+// Mercado Pago no está documentada públicamente — no la replicamos acá,
+// solo reaccionamos a los eventos que Mercado Pago decida mandar.
+const PAYMENT_WEBHOOK_TYPES = ['subscription_authorized_payment'];
 
 @Injectable()
 export class MembershipsService {
@@ -126,10 +137,11 @@ export class MembershipsService {
   // Webhook de Mercado Pago: verifica firma, deduplica por notification id
   // (INSERT con PK única — no "leer y después insertar", para no dejar una
   // carrera entre notificaciones concurrentes), y sincroniza el estado de
-  // la Membership contra el PreApproval real en la API (nunca confiamos en
-  // el body de la notificación como fuente de verdad, solo como aviso de
-  // "algo cambió, andá a mirar"). Eventos de topic `payment` (dunning) se
-  // ignoran acá a propósito — eso es E2-05.
+  // la Membership contra el recurso real en la API (nunca confiamos en el
+  // body de la notificación como fuente de verdad, solo como aviso de
+  // "algo cambió, andá a mirar"). Maneja dos topics: `subscription_preapproval`
+  // (alta/cancelación) y `subscription_authorized_payment` (cobro recurrente,
+  // dunning — E2-05); el topic genérico `payment` no aplica acá.
   async handleWebhook(
     payload: MercadoPagoWebhookPayload,
     headers: MercadoPagoWebhookHeaders,
@@ -157,10 +169,14 @@ export class MembershipsService {
     }
 
     const dataId = payload.data?.id;
+    const isPreapprovalEvent = PREAPPROVAL_WEBHOOK_TYPES.includes(
+      payload.type ?? '',
+    );
+    const isPaymentEvent = PAYMENT_WEBHOOK_TYPES.includes(payload.type ?? '');
     if (
       !dataId ||
       payload.user_id == null ||
-      !PREAPPROVAL_WEBHOOK_TYPES.includes(payload.type ?? '')
+      (!isPreapprovalEvent && !isPaymentEvent)
     ) {
       return;
     }
@@ -179,9 +195,14 @@ export class MembershipsService {
       gym.id,
     );
     const client = this.mercadoPagoService.clientFor(accessToken);
-    const subscription = await client.subscriptions.get({ id: dataId });
 
-    await this.syncMembershipFromPreapproval(subscription);
+    if (isPreapprovalEvent) {
+      const subscription = await client.subscriptions.get({ id: dataId });
+      await this.syncMembershipFromPreapproval(subscription);
+    } else {
+      const payment = await client.payments.get({ id: dataId });
+      await this.syncMembershipFromPayment(payment);
+    }
   }
 
   // Cancelación "hasta fin del período pagado" (sesión de scoping de
@@ -356,5 +377,48 @@ export class MembershipsService {
       cancelAtPeriodEnd: false,
     });
     await this.membershipRepository.save(membership);
+  }
+
+  // Dunning (E2-05): un cobro recurrente rechazado pasa la Membership a
+  // past_due sin cortar el acceso de inmediato (sesión de scoping de
+  // billing); uno aprobado la vuelve a active. No replicamos acá la
+  // cadencia de reintentos de Mercado Pago (no está documentada
+  // públicamente) — si Mercado Pago termina cancelando el PreApproval
+  // tras agotar sus propios reintentos, el evento subscription_preapproval
+  // que ya manejamos arriba se encarga de marcar cancelled.
+  //
+  // Correlación pago → Membership vía external_reference, asumiendo que
+  // Mercado Pago copia el external_reference del PreApproval a los pagos
+  // recurrentes que genera — no confirmado contra tráfico real todavía,
+  // ver CLAUDE.md.
+  private async syncMembershipFromPayment(
+    payment: PaymentDetails,
+  ): Promise<void> {
+    if (!payment.external_reference) {
+      return;
+    }
+
+    const membership = await this.membershipRepository.findOne({
+      where: {
+        userId: payment.external_reference,
+        status: In(['active', 'past_due']),
+      },
+    });
+    if (!membership) {
+      return;
+    }
+
+    if (payment.status === 'approved' && membership.status === 'past_due') {
+      await this.membershipRepository.update(membership.id, {
+        status: 'active',
+      });
+      return;
+    }
+
+    if (payment.status === 'rejected' && membership.status === 'active') {
+      await this.membershipRepository.update(membership.id, {
+        status: 'past_due',
+      });
+    }
   }
 }
