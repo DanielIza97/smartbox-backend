@@ -13,6 +13,7 @@ import { In, LessThanOrEqual, Repository } from 'typeorm';
 import { WebhookSignatureValidator } from 'mercadopago';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
+import { Invoice } from './entities/invoice.entity';
 import { Plan } from '../plans/entities/plan.entity';
 import { User } from '../users/user.entity';
 import {
@@ -69,6 +70,8 @@ export class MembershipsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(ProcessedWebhookEvent)
     private readonly webhookEventRepository: Repository<ProcessedWebhookEvent>,
+    @InjectRepository(Invoice)
+    private readonly invoiceRepository: Repository<Invoice>,
     private readonly mercadoPagoService: MercadoPagoService,
     private readonly gymsService: GymsService,
     private readonly configService: ConfigService,
@@ -408,6 +411,8 @@ export class MembershipsService {
       return;
     }
 
+    await this.recordInvoice(membership.id, payment);
+
     if (payment.status === 'approved' && membership.status === 'past_due') {
       await this.membershipRepository.update(membership.id, {
         status: 'active',
@@ -420,5 +425,51 @@ export class MembershipsService {
         status: 'past_due',
       });
     }
+  }
+
+  // Registro interno de facturas (E2-06) — upsert por mercadoPagoPaymentId
+  // porque Mercado Pago puede notificar más de una vez el mismo Payment
+  // (p. ej. creado y luego actualizado a su estado final); nunca queremos
+  // dos filas para el mismo cobro. Sin UI de historial ni endpoint propio
+  // en v1.0 — es la fuente de datos para reportes de Epic 4.
+  private async recordInvoice(
+    membershipId: string,
+    payment: PaymentDetails,
+  ): Promise<void> {
+    if (!payment.id) {
+      return;
+    }
+
+    const mercadoPagoPaymentId = String(payment.id);
+    const amountCents =
+      typeof payment.transaction_amount === 'number'
+        ? Math.round(payment.transaction_amount * 100)
+        : 0;
+    const paidAt = payment.date_approved
+      ? new Date(payment.date_approved)
+      : null;
+    const status = payment.status ?? 'unknown';
+
+    const existing = await this.invoiceRepository.findOne({
+      where: { mercadoPagoPaymentId },
+    });
+    if (existing) {
+      await this.invoiceRepository.update(existing.id, {
+        status,
+        amountCents,
+        paidAt,
+      });
+      return;
+    }
+
+    await this.invoiceRepository.save(
+      this.invoiceRepository.create({
+        membershipId,
+        mercadoPagoPaymentId,
+        amountCents,
+        status,
+        paidAt,
+      }),
+    );
   }
 }

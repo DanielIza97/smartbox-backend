@@ -12,6 +12,7 @@ import {
 import { MembershipsService } from './memberships.service';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
+import { Invoice } from './entities/invoice.entity';
 import { Plan } from '../plans/entities/plan.entity';
 import { User } from '../users/user.entity';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
@@ -42,6 +43,12 @@ describe('MembershipsService', () => {
   let planRepository: { findOne: jest.Mock };
   let userRepository: { findOne: jest.Mock };
   let webhookEventRepository: { insert: jest.Mock };
+  let invoiceRepository: {
+    findOne: jest.Mock;
+    update: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
   let mercadoPagoService: { clientFor: jest.Mock };
   let gymsService: {
     getMercadoPagoAccessToken: jest.Mock;
@@ -74,6 +81,12 @@ describe('MembershipsService', () => {
     planRepository = { findOne: jest.fn() };
     userRepository = { findOne: jest.fn() };
     webhookEventRepository = { insert: jest.fn().mockResolvedValue(undefined) };
+    invoiceRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue(undefined),
+      create: jest.fn((data: object) => data),
+      save: jest.fn((data: object) => Promise.resolve(data)),
+    };
     subscriptionsApiMock = {
       create: jest
         .fn()
@@ -110,6 +123,7 @@ describe('MembershipsService', () => {
           provide: getRepositoryToken(ProcessedWebhookEvent),
           useValue: webhookEventRepository,
         },
+        { provide: getRepositoryToken(Invoice), useValue: invoiceRepository },
         { provide: MercadoPagoService, useValue: mercadoPagoService },
         { provide: GymsService, useValue: gymsService },
         { provide: ConfigService, useValue: configService },
@@ -442,10 +456,9 @@ describe('MembershipsService', () => {
         },
       );
 
-      expect(membershipRepository.update).toHaveBeenCalledWith(
-        'membership-1',
-        { status: 'active' },
-      );
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        status: 'active',
+      });
     });
 
     it('marca la Membership como past_due cuando el pago recurrente es rechazado', async () => {
@@ -473,10 +486,9 @@ describe('MembershipsService', () => {
         },
       );
 
-      expect(membershipRepository.update).toHaveBeenCalledWith(
-        'membership-1',
-        { status: 'past_due' },
-      );
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        status: 'past_due',
+      });
     });
 
     it('no hace nada si el pago rechazado no tiene una Membership active/past_due correlacionada', async () => {
@@ -502,6 +514,114 @@ describe('MembershipsService', () => {
       );
 
       expect(membershipRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('registra una factura nueva con el monto en centavos y paidAt del pago aprobado', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: 998877,
+        status: 'approved',
+        external_reference: 'client-1',
+        transaction_amount: 29.99,
+        date_approved: '2026-07-17T10:00:00.000Z',
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'active',
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(invoiceRepository.findOne).toHaveBeenCalledWith({
+        where: { mercadoPagoPaymentId: '998877' },
+      });
+      expect(invoiceRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          membershipId: 'membership-1',
+          mercadoPagoPaymentId: '998877',
+          amountCents: 2999,
+          status: 'approved',
+          paidAt: new Date('2026-07-17T10:00:00.000Z'),
+        }),
+      );
+    });
+
+    it('actualiza la factura existente en vez de duplicarla si el mismo Payment se vuelve a notificar', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        id: 998877,
+        status: 'rejected',
+        external_reference: 'client-1',
+        transaction_amount: 29.99,
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'active',
+      });
+      invoiceRepository.findOne.mockResolvedValue({ id: 'invoice-1' });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', {
+        status: 'rejected',
+        amountCents: 2999,
+        paidAt: null,
+      });
+      expect(invoiceRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('no registra factura si el Payment no trae id', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      paymentsApiMock.get.mockResolvedValue({
+        status: 'approved',
+        external_reference: 'client-1',
+        transaction_amount: 29.99,
+      });
+      membershipRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        status: 'past_due',
+      });
+
+      await service.handleWebhook(
+        {
+          id: 2,
+          type: 'subscription_authorized_payment',
+          data: { id: paymentDataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(paymentDataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(invoiceRepository.findOne).not.toHaveBeenCalled();
+      expect(invoiceRepository.save).not.toHaveBeenCalled();
+      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
+        status: 'active',
+      });
     });
 
     it('no hace nada si el pago no trae external_reference', async () => {
