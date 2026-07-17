@@ -43,4 +43,8 @@ export const envValidationSchema = Joi.object({
   MERCADOPAGO_CLIENT_ID: Joi.string().required(),
   MERCADOPAGO_CLIENT_SECRET: Joi.string().required(),
   MERCADOPAGO_REDIRECT_URI: Joi.string().uri().required(),
+
+  // "Secret signature" de la app, configurada en Tus Integraciones →
+  // Webhooks. Se usa para verificar la firma de POST /memberships/webhook/mercadopago.
+  MERCADOPAGO_WEBHOOK_SECRET: Joi.string().required(),
 }).unknown(true);

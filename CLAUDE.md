@@ -12,8 +12,9 @@ Backend (NestJS + PostgreSQL) de **SmartBox**, un SaaS de gestión para gimnasio
 
 - **Completo**: identidad (auth, usuarios, roles) y **Epic 0 · Hardening** (migraciones, rate limiting, CORS, fix de roles).
 - **Completo**: **Epic 1 · Fundación multi-tenant** — entidad `Gym`, `User.gymId`, JWT con `gymId`, scoping por gimnasio en `Users`/`Admin`/`Gyms` (403, no 404, en cruces entre gimnasios), migración aplicada, tests unitarios + e2e de aislamiento.
-- **Siguiente en el roadmap**: Epic 2 (Membresías y facturación) → Epic 3 (Reservas) → Epic 4 (Operación del gimnasio) → Epic 5 (Observabilidad). Eso cierra **SmartBox v1.0**.
-- Antes de arrancar una historia nueva: confirmá en qué épica/sprint del documento oficial estás parado. Epic 2 requiere la sesión de scoping de billing (ver más abajo) antes de programar.
+- **En progreso**: **Epic 2 · Membresías y facturación** — `E2-01` (entidades `Plan`/`Membership`), `E2-02` (integración con Mercado Pago, modelo Marketplace/OAuth) y `E2-03` (webhook idempotente y con firma verificada) completos. Falta `E2-04` (ciclo de vida completo, incluida la simulación de `cancel_at_period_end`) en adelante.
+- **Siguiente en el roadmap**: terminar Epic 2 → Epic 3 (Reservas) → Epic 4 (Operación del gimnasio) → Epic 5 (Observabilidad). Eso cierra **SmartBox v1.0**.
+- Antes de arrancar una historia nueva: confirmá en qué épica/sprint del documento oficial estás parado.
 
 ## Decisiones de alcance ya tomadas para v1.0 (no las reabras sin avisar)
 
@@ -24,6 +25,12 @@ Backend (NestJS + PostgreSQL) de **SmartBox**, un SaaS de gestión para gimnasio
   - El ADMIN conecta su cuenta vía OAuth: `GET /gyms/:id/mercadopago/connect` devuelve la `authorizationUrl`; Mercado Pago redirige a `GET /mercadopago/oauth/callback` (público, sin JWT — la seguridad depende del `state` de un solo uso guardado en `Gym.mercadoPagoOauthState`/`...ExpiresAt`, generado con `TokenService`).
   - `PlansService`/`MembershipsService` **nunca** llaman a Mercado Pago con un token global — siempre resuelven el `access_token` del gimnasio dueño vía `GymsService.getMercadoPagoAccessToken(gymId)` y arman un cliente por-request con `MercadoPagoService.clientFor(accessToken)`. Si un gimnasio no conectó su cuenta, crear un `Plan` o suscribirse falla con 400 explícito.
   - **Sin refresh automático de tokens todavía (gap conocido)** — los access tokens de OAuth de Mercado Pago expiran; `Gym.mercadoPagoRefreshToken` ya se guarda, pero la lógica de refresco (detectar expiración, llamar `MercadoPagoService.oauth.refresh()`) no está implementada. Historia nueva antes de operar en producción con clientes reales.
+- **Webhook de Mercado Pago (E2-03), implementado 2026-07-17** — `POST /memberships/webhook/mercadopago` (público, sin JWT):
+  - Firma verificada con `WebhookSignatureValidator` del SDK oficial (`import { WebhookSignatureValidator } from 'mercadopago'`) contra `MERCADOPAGO_WEBHOOK_SECRET` — no reinventar el HMAC a mano, el SDK ya lo resuelve.
+  - Idempotencia por `notification.id`: `INSERT` en `processed_webhook_events` (PK = id) y capturar el error de constraint única como señal de "ya procesado" — nunca "leer y después insertar" (deja una carrera entre notificaciones concurrentes).
+  - El body de la notificación **nunca** es la fuente de verdad — solo dispara una consulta a la API real (`client.subscriptions.get({id: data.id})`) antes de tocar la `Membership`.
+  - **Solo maneja eventos de tipo preapproval** (`subscription_preapproval`/`preapproval`, aceptado de forma defensiva porque el string exacto todavía no está confirmado contra tráfico real de Mercado Pago). Eventos de topic `payment` (dunning) se ignoran a propósito — esa lógica es `E2-05`, no la reinterpretes como ya cubierta acá.
+  - Mapeo de estado: `authorized` sin `Membership` previa → la crea (`active`, resolviendo el `Plan` vía `external_reference` → `User.gym`, no vía un campo `preapproval_plan_id` en la respuesta porque no está confirmado que ese campo venga en el `GET`); `authorized` con `Membership` existente → actualiza `currentPeriodEnd`; `cancelled` → marca la `Membership` como `cancelled` si existía.
 - **Scoping de billing (Epic 2), cerrado 2026-07-16, adaptado a Mercado Pago el 2026-07-17** — ver el detalle en el documento oficial (§00, "6b · Resultado de la sesión de scoping de billing"):
   - Trial de **14 días**: se define una sola vez en el `PreApprovalPlan` (`auto_recurring.free_trial: {frequency: 14, frequency_type: 'days'}`), no por suscripción — todo CLIENT que se suscribe al plan de un gym hereda el mismo trial.
   - Alta de membresía **únicamente self-service con tarjeta**: `POST /memberships/subscribe` crea un `PreApproval` con `status: 'pending'` (sin `card_token_id`) y devuelve el `init_point` hosted de Mercado Pago para que el socio cargue la tarjeta ahí — cero UI de pago propia. Nada de alta manual/offline por ADMIN en v1.0.

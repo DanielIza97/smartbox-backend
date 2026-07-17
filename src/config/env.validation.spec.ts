@@ -21,6 +21,7 @@ describe('envValidationSchema', () => {
     MERCADOPAGO_CLIENT_SECRET: 'client-secret',
     MERCADOPAGO_REDIRECT_URI:
       'http://localhost:3001/mercadopago/oauth/callback',
+    MERCADOPAGO_WEBHOOK_SECRET: 'webhook-secret',
   };
 
   const withoutKey = (key: string): Record<string, string> => {
@@ -95,6 +96,15 @@ describe('envValidationSchema', () => {
     );
 
     expect(error?.message).toContain('MERCADOPAGO_REDIRECT_URI');
+  });
+
+  it('falla si falta MERCADOPAGO_WEBHOOK_SECRET', () => {
+    const { error } = envValidationSchema.validate(
+      withoutKey('MERCADOPAGO_WEBHOOK_SECRET'),
+      { abortEarly: false },
+    );
+
+    expect(error?.message).toContain('MERCADOPAGO_WEBHOOK_SECRET');
   });
 
   it('permite variables de entorno adicionales no declaradas en el schema', () => {

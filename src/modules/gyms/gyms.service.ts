@@ -115,4 +115,15 @@ export class GymsService {
     }
     return gym.mercadoPagoAccessToken;
   }
+
+  // Usado por el webhook de Mercado Pago (E2-03) para averiguar a qué
+  // gimnasio pertenece una notificación — el payload trae el user_id de
+  // Mercado Pago del vendedor, no el gymId de SmartBox.
+  async findByMercadoPagoUserId(
+    mercadoPagoUserId: string,
+  ): Promise<Gym | null> {
+    return await this.gymRepository.findOne({
+      where: { mercadoPagoUserId },
+    });
+  }
 }

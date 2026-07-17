@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Membership } from './entities/membership.entity';
+import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
 import { Plan } from '../plans/entities/plan.entity';
+import { User } from '../users/user.entity';
 import { MembershipsService } from './memberships.service';
 import { MembershipsController } from './memberships.controller';
 import { MercadoPagoModule } from '../../common/mercadopago/mercadopago.module';
@@ -10,7 +12,7 @@ import { GymsModule } from '../gyms/gyms.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Membership, Plan]),
+    TypeOrmModule.forFeature([Membership, ProcessedWebhookEvent, Plan, User]),
     MercadoPagoModule,
     GymsModule,
   ],
