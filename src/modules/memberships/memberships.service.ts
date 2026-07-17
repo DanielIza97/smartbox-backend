@@ -278,6 +278,7 @@ export class MembershipsService {
     });
     return await this.membershipRepository.findOneOrFail({
       where: { id: membership.id },
+      relations: { plan: true },
     });
   }
 

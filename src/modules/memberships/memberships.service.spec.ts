@@ -758,6 +758,13 @@ describe('MembershipsService', () => {
       expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
         cancelAtPeriodEnd: true,
       });
+      // El plan tiene que venir en la respuesta (bug encontrado en vivo: el
+      // findOneOrFail final no traía la relación, así que el frontend se
+      // quedaba sin nombre/precio del plan justo después de cancelar).
+      expect(membershipRepository.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 'membership-1' },
+        relations: { plan: true },
+      });
     });
 
     it('permite a un ADMIN del mismo gym cancelar la membresía de un socio', async () => {
