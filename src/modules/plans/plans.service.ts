@@ -39,13 +39,6 @@ export class PlansService {
       throw new NotFoundException('El gimnasio especificado no existe.');
     }
 
-    const existing = await this.planRepository.findOne({ where: { gymId } });
-    if (existing) {
-      throw new BadRequestException(
-        'Este gimnasio ya tiene un plan. Editá el existente en vez de crear uno nuevo.',
-      );
-    }
-
     // Modelo Marketplace: el plan se crea en la cuenta de Mercado Pago del
     // propio gimnasio, no en una cuenta de la plataforma — sin conectar,
     // no hay dónde crearlo.
@@ -66,8 +59,9 @@ export class PlansService {
   }
 
   // PreApprovalPlan recurrente mensual en Mercado Pago, con el trial de 14
-  // días de la sesión de scoping de billing ya incluido — un solo plan por
-  // gym (Recomendación 3), así que un solo PreApprovalPlan alcanza para v1.0.
+  // días de la sesión de scoping de billing ya incluido — un PreApprovalPlan
+  // por Plan (E6-04: varios Plan por gimnasio, cada uno con su propio
+  // PreApprovalPlan en Mercado Pago).
   private async createMercadoPagoPlan(
     gymAccessToken: string,
     gymName: string,

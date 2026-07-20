@@ -15,8 +15,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { RequestWithUser } from '../auth/types/auth.types';
 
-// Un solo plan mensual por gimnasio (Recomendación 3). Sin PUT/DELETE
-// todavía — el alcance de E2-01 es la entidad y el alta inicial.
+// Múltiples planes mensuales por gimnasio (niveles, E6-04) — sin PUT/DELETE
+// todavía, mismo alcance minimalista que el resto de los catálogos (Class,
+// Shift): la entidad y el alta, se agrega si una historia futura lo pide.
 @ApiTags('plans')
 @ApiBearerAuth()
 @Controller('plans')
@@ -24,7 +25,7 @@ import type { RequestWithUser } from '../auth/types/auth.types';
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
 
-  @ApiOperation({ summary: 'Crear el plan mensual de un gimnasio' })
+  @ApiOperation({ summary: 'Crear un plan de membresía para un gimnasio' })
   @Roles('SUPER_ADMIN', 'ADMIN')
   @Post()
   create(@Body() dto: CreatePlanDto, @Request() req: RequestWithUser) {

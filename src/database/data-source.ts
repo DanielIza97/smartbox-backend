@@ -8,6 +8,7 @@ import { Plan } from '../modules/plans/entities/plan.entity';
 import { Membership } from '../modules/memberships/entities/membership.entity';
 import { ProcessedWebhookEvent } from '../modules/memberships/entities/processed-webhook-event.entity';
 import { Invoice } from '../modules/memberships/entities/invoice.entity';
+import { PendingSubscription } from '../modules/memberships/entities/pending-subscription.entity';
 import { ClassOrResource } from '../modules/classes/entities/class-or-resource.entity';
 import { Reservation } from '../modules/reservations/entities/reservation.entity';
 import { Shift } from '../modules/shifts/entities/shift.entity';
@@ -30,6 +31,7 @@ export const AppDataSource = new DataSource({
     Membership,
     ProcessedWebhookEvent,
     Invoice,
+    PendingSubscription,
     ClassOrResource,
     Reservation,
     Shift,

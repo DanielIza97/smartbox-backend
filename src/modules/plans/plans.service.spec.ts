@@ -93,22 +93,26 @@ describe('PlansService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('rechaza crear un segundo plan para el mismo gimnasio', async () => {
-      gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
-      planRepository.findOne.mockResolvedValue({ id: 'plan-existente' });
+    // E6-04: varios Plan (niveles) por gimnasio — ya no hay un unique en
+    // gym_id, así que un segundo (o tercer) plan para el mismo gimnasio se
+    // crea sin problema.
+    it('permite crear varios planes para el mismo gimnasio (E6-04)', async () => {
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
 
-      await expect(
-        service.create({
-          name: 'Plan mensual',
-          priceCents: 4999,
-          gymId: 'gym-a',
-        }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.create({
+        name: 'Plan premium',
+        priceCents: 9999,
+        gymId: 'gym-a',
+      });
+
+      expect(planRepository.findOne).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({ name: 'Plan premium', priceCents: 9999 }),
+      );
     });
 
-    it('crea el plan cuando el gimnasio existe y no tiene uno todavía', async () => {
+    it('crea el plan cuando el gimnasio existe', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
-      planRepository.findOne.mockResolvedValue(null);
 
       const result = await service.create({
         name: 'Plan mensual',
@@ -146,7 +150,6 @@ describe('PlansService', () => {
 
     it('lanza BadRequestException si Mercado Pago falla al crear el plan', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
-      planRepository.findOne.mockResolvedValue(null);
       plansApiMock.create.mockRejectedValue(new Error('mercadopago down'));
 
       await expect(
@@ -160,7 +163,6 @@ describe('PlansService', () => {
 
     it('propaga el error si el gimnasio no conectó Mercado Pago', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a', name: 'Gym A' });
-      planRepository.findOne.mockResolvedValue(null);
       gymsService.getMercadoPagoAccessToken.mockRejectedValue(
         new BadRequestException(
           'Este gimnasio todavía no conectó su cuenta de Mercado Pago.',

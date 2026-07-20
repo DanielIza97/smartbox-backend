@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
 import type { MercadoPagoWebhookPayload } from './memberships.service';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -31,15 +32,18 @@ export class MembershipsController {
 
   @ApiOperation({
     summary:
-      'Iniciar la suscripción al plan del propio gimnasio (Mercado Pago, trial 14 días)',
+      'Iniciar la suscripción a un plan del propio gimnasio (Mercado Pago, trial 14 días)',
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CLIENT')
   @HttpCode(HttpStatus.OK)
   @Post('subscribe')
-  subscribe(@Request() req: RequestWithUser) {
-    return this.membershipsService.subscribe(req.user!);
+  subscribe(
+    @Body() dto: CreateSubscriptionDto,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.membershipsService.subscribe(dto, req.user!);
   }
 
   @ApiOperation({

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
 import { Invoice } from './entities/invoice.entity';
+import { PendingSubscription } from './entities/pending-subscription.entity';
 import { Plan } from '../plans/entities/plan.entity';
 import { User } from '../users/user.entity';
 import { MembershipsService } from './memberships.service';
@@ -17,6 +18,7 @@ import { GymsModule } from '../gyms/gyms.module';
       Membership,
       ProcessedWebhookEvent,
       Invoice,
+      PendingSubscription,
       Plan,
       User,
     ]),

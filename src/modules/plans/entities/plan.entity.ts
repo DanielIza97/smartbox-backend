@@ -9,9 +9,10 @@ import {
 } from 'typeorm';
 import { Gym } from '../../gyms/entities/gym.entity';
 
-// Un solo plan mensual por gimnasio para v1.0 (Recomendación 3 / sesión de
-// scoping de billing) — de ahí el unique en gym_id. Múltiples planes por
-// gimnasio queda diferido a E6-04 (v1.5).
+// Múltiples planes por gimnasio (niveles/tiers) desde E6-04 — antes de eso,
+// v1.0 tenía un unique en gym_id (Recomendación 3 / sesión de scoping de
+// billing) que restringía a un solo plan mensual. Sin descuentos ni cupones
+// todavía — eso es alcance explícitamente diferido dentro de E6-04.
 @Entity('plans')
 export class Plan {
   @PrimaryGeneratedColumn('uuid')
@@ -21,7 +22,7 @@ export class Plan {
   @JoinColumn({ name: 'gym_id' })
   gym!: Gym;
 
-  @Column({ name: 'gym_id', unique: true })
+  @Column({ name: 'gym_id' })
   gymId!: string;
 
   @Column()

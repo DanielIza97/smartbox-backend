@@ -14,8 +14,10 @@ import { WebhookSignatureValidator } from 'mercadopago';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
 import { Invoice } from './entities/invoice.entity';
+import { PendingSubscription } from './entities/pending-subscription.entity';
 import { Plan } from '../plans/entities/plan.entity';
 import { User } from '../users/user.entity';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import {
   GymMercadoPagoClient,
   MercadoPagoService,
@@ -72,6 +74,8 @@ export class MembershipsService {
     private readonly webhookEventRepository: Repository<ProcessedWebhookEvent>,
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
+    @InjectRepository(PendingSubscription)
+    private readonly pendingSubscriptionRepository: Repository<PendingSubscription>,
     private readonly mercadoPagoService: MercadoPagoService,
     private readonly gymsService: GymsService,
     private readonly configService: ConfigService,
@@ -84,6 +88,7 @@ export class MembershipsService {
   // suscripción (E2-03), no acá. Sesión de scoping de billing: alta solo
   // self-service con tarjeta, sin alta manual/offline por ADMIN.
   async subscribe(
+    dto: CreateSubscriptionDto,
     requester: AuthenticatedUser,
   ): Promise<{ checkoutUrl: string }> {
     if (!requester.gymId) {
@@ -93,12 +98,13 @@ export class MembershipsService {
     }
 
     const plan = await this.planRepository.findOne({
-      where: { gymId: requester.gymId },
+      where: { id: dto.planId },
     });
     if (!plan) {
-      throw new NotFoundException(
-        'Tu gimnasio todavía no tiene un plan de membresía configurado.',
-      );
+      throw new NotFoundException('El plan especificado no existe.');
+    }
+    if (plan.gymId !== requester.gymId) {
+      throw new ForbiddenException('Ese plan no pertenece a tu gimnasio.');
     }
 
     const existing = await this.membershipRepository.findOne({
@@ -126,9 +132,21 @@ export class MembershipsService {
         },
       });
 
-      if (!subscription.init_point) {
-        throw new Error('Mercado Pago no devolvió un init_point.');
+      if (!subscription.init_point || !subscription.id) {
+        throw new Error('Mercado Pago no devolvió un init_point/id.');
       }
+
+      // E6-04: con varios Plan por gimnasio, el webhook que confirma esta
+      // suscripción (subscription_preapproval → authorized) necesita saber
+      // a cuál Plan corresponde — PreApprovalResponse no devuelve
+      // preapproval_plan_id, así que lo guardamos acá.
+      await this.pendingSubscriptionRepository.save(
+        this.pendingSubscriptionRepository.create({
+          mercadoPagoPreapprovalId: subscription.id,
+          planId: plan.id,
+        }),
+      );
+
       return { checkoutUrl: subscription.init_point };
     } catch {
       throw new BadRequestException(
@@ -396,8 +414,17 @@ export class MembershipsService {
       return;
     }
 
+    // E6-04: varios Plan por gimnasio — resolvemos vía la PendingSubscription
+    // guardada en subscribe(), no vía gymId (ya no identifica un Plan único).
+    const pending = await this.pendingSubscriptionRepository.findOne({
+      where: { mercadoPagoPreapprovalId: subscription.id },
+    });
+    if (!pending) {
+      return;
+    }
+
     const plan = await this.planRepository.findOne({
-      where: { gymId: user.gym.id },
+      where: { id: pending.planId },
     });
     if (!plan) {
       return;

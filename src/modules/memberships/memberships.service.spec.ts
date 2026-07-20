@@ -14,6 +14,7 @@ import { MembershipsService } from './memberships.service';
 import { Membership } from './entities/membership.entity';
 import { ProcessedWebhookEvent } from './entities/processed-webhook-event.entity';
 import { Invoice } from './entities/invoice.entity';
+import { PendingSubscription } from './entities/pending-subscription.entity';
 import { Plan } from '../plans/entities/plan.entity';
 import { User } from '../users/user.entity';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
@@ -42,6 +43,11 @@ describe('MembershipsService', () => {
     save: jest.Mock;
   };
   let planRepository: { findOne: jest.Mock };
+  let pendingSubscriptionRepository: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
   let userRepository: { findOne: jest.Mock };
   let webhookEventRepository: { insert: jest.Mock };
   let invoiceRepository: {
@@ -81,6 +87,11 @@ describe('MembershipsService', () => {
       save: jest.fn((data: object) => Promise.resolve(data)),
     };
     planRepository = { findOne: jest.fn() };
+    pendingSubscriptionRepository = {
+      findOne: jest.fn(),
+      create: jest.fn((data: object) => data),
+      save: jest.fn((data: object) => Promise.resolve(data)),
+    };
     userRepository = { findOne: jest.fn() };
     webhookEventRepository = { insert: jest.fn().mockResolvedValue(undefined) };
     invoiceRepository = {
@@ -91,9 +102,10 @@ describe('MembershipsService', () => {
       save: jest.fn((data: object) => Promise.resolve(data)),
     };
     subscriptionsApiMock = {
-      create: jest
-        .fn()
-        .mockResolvedValue({ init_point: 'https://mercadopago.com/xyz' }),
+      create: jest.fn().mockResolvedValue({
+        id: 'preapproval-xyz',
+        init_point: 'https://mercadopago.com/xyz',
+      }),
       get: jest.fn(),
       update: jest.fn().mockResolvedValue({}),
     };
@@ -121,6 +133,10 @@ describe('MembershipsService', () => {
           useValue: membershipRepository,
         },
         { provide: getRepositoryToken(Plan), useValue: planRepository },
+        {
+          provide: getRepositoryToken(PendingSubscription),
+          useValue: pendingSubscriptionRepository,
+        },
         { provide: getRepositoryToken(User), useValue: userRepository },
         {
           provide: getRepositoryToken(ProcessedWebhookEvent),
@@ -137,28 +153,45 @@ describe('MembershipsService', () => {
   });
 
   describe('subscribe', () => {
+    const dto = { planId: 'plan-a' };
+
     it('rechaza si el solicitante no pertenece a ningún gimnasio', async () => {
       await expect(
-        service.subscribe({ ...client, gymId: null }),
+        service.subscribe(dto, { ...client, gymId: null }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('lanza NotFoundException si el gimnasio no tiene plan configurado', async () => {
+    it('lanza NotFoundException si el plan no existe', async () => {
       planRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.subscribe(client)).rejects.toThrow(
+      await expect(service.subscribe(dto, client)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    // E6-04: varios Plan por gimnasio — un socio no puede suscribirse al
+    // plan de otro gimnasio.
+    it('rechaza si el plan no pertenece al gimnasio del solicitante', async () => {
+      planRepository.findOne.mockResolvedValue({
+        id: 'plan-a',
+        gymId: 'gym-b',
+        mercadoPagoPlanId: 'plan_test',
+      });
+
+      await expect(service.subscribe(dto, client)).rejects.toThrow(
+        ForbiddenException,
       );
     });
 
     it('rechaza si el socio ya tiene una membresía activa', async () => {
       planRepository.findOne.mockResolvedValue({
         id: 'plan-a',
+        gymId: 'gym-a',
         mercadoPagoPlanId: 'plan_test',
       });
       membershipRepository.findOne.mockResolvedValue({ id: 'membership-1' });
 
-      await expect(service.subscribe(client)).rejects.toThrow(
+      await expect(service.subscribe(dto, client)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -166,6 +199,7 @@ describe('MembershipsService', () => {
     it('propaga el error si el gimnasio no conectó Mercado Pago', async () => {
       planRepository.findOne.mockResolvedValue({
         id: 'plan-a',
+        gymId: 'gym-a',
         mercadoPagoPlanId: 'plan_test',
       });
       membershipRepository.findOne.mockResolvedValue(null);
@@ -175,19 +209,24 @@ describe('MembershipsService', () => {
         ),
       );
 
-      await expect(service.subscribe(client)).rejects.toThrow(
+      await expect(service.subscribe(dto, client)).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('crea la suscripción en la cuenta del gimnasio y devuelve el init_point', async () => {
+    it('crea la suscripción en la cuenta del gimnasio, guarda la PendingSubscription y devuelve el init_point', async () => {
       planRepository.findOne.mockResolvedValue({
         id: 'plan-a',
+        gymId: 'gym-a',
         mercadoPagoPlanId: 'plan_test',
       });
       membershipRepository.findOne.mockResolvedValue(null);
+      subscriptionsApiMock.create.mockResolvedValue({
+        id: 'preapproval-xyz',
+        init_point: 'https://mercadopago.com/xyz',
+      });
 
-      const result = await service.subscribe(client);
+      const result = await service.subscribe(dto, client);
 
       expect(gymsService.getMercadoPagoAccessToken).toHaveBeenCalledWith(
         'gym-a',
@@ -202,12 +241,19 @@ describe('MembershipsService', () => {
           status: 'pending',
         },
       });
+      expect(pendingSubscriptionRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mercadoPagoPreapprovalId: 'preapproval-xyz',
+          planId: 'plan-a',
+        }),
+      );
       expect(result).toEqual({ checkoutUrl: 'https://mercadopago.com/xyz' });
     });
 
     it('lanza BadRequestException si Mercado Pago falla al crear la suscripción', async () => {
       planRepository.findOne.mockResolvedValue({
         id: 'plan-a',
+        gymId: 'gym-a',
         mercadoPagoPlanId: 'plan_test',
       });
       membershipRepository.findOne.mockResolvedValue(null);
@@ -215,7 +261,7 @@ describe('MembershipsService', () => {
         new Error('mercadopago down'),
       );
 
-      await expect(service.subscribe(client)).rejects.toThrow(
+      await expect(service.subscribe(dto, client)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -310,6 +356,10 @@ describe('MembershipsService', () => {
         id: 'client-1',
         gym: { id: 'gym-a' },
       });
+      pendingSubscriptionRepository.findOne.mockResolvedValue({
+        mercadoPagoPreapprovalId: dataId,
+        planId: 'plan-a',
+      });
       planRepository.findOne.mockResolvedValue({
         id: 'plan-a',
         gymId: 'gym-a',
@@ -337,6 +387,40 @@ describe('MembershipsService', () => {
           mercadoPagoPreapprovalId: dataId,
         }),
       );
+    });
+
+    // E6-04: sin la PendingSubscription guardada en subscribe() no hay forma
+    // de saber a cuál Plan del gimnasio corresponde — no se crea la
+    // Membership en vez de adivinar.
+    it('no crea la Membership si no hay una PendingSubscription correlacionada', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+      subscriptionsApiMock.get.mockResolvedValue({
+        id: dataId,
+        status: 'authorized',
+        external_reference: 'client-1',
+        next_payment_date: '2026-08-17T00:00:00.000Z',
+      });
+      membershipRepository.findOne.mockResolvedValue(null);
+      userRepository.findOne.mockResolvedValue({
+        id: 'client-1',
+        gym: { id: 'gym-a' },
+      });
+      pendingSubscriptionRepository.findOne.mockResolvedValue(null);
+
+      await service.handleWebhook(
+        {
+          id: 1,
+          type: 'subscription_preapproval',
+          data: { id: dataId },
+          user_id: 999,
+        },
+        {
+          xSignature: signWebhook(dataId, requestId, ts),
+          xRequestId: requestId,
+        },
+      );
+
+      expect(membershipRepository.save).not.toHaveBeenCalled();
     });
 
     it('actualiza la Membership existente en vez de crear una nueva', async () => {
