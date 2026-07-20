@@ -12,6 +12,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { SignupGymDto } from './dto/signup-gym.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -38,6 +39,18 @@ export class AuthController {
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  // 2b. ONBOARDING SELF-SERVE DE GIMNASIOS (E6-05, público) — crea el Gym y
+  // su cuenta ADMIN dueña en un solo paso, sin pasar por SUPER_ADMIN.
+  @ApiOperation({
+    summary: 'Alta self-serve de un gimnasio nuevo + su cuenta ADMIN (E6-05)',
+  })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @Post('signup-gym')
+  async signupGym(@Body() signupGymDto: SignupGymDto) {
+    return this.authService.signupGym(signupGymDto);
   }
 
   // 3. REGISTRO INTERNO (Solo SUPER_ADMIN crea Admins o Staff)

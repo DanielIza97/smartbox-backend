@@ -16,9 +16,11 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { RequestWithUser } from '../auth/types/auth.types';
 
-// Alta y listado de gimnasios (tenants del SaaS). Sin onboarding self-serve
-// todavía (E6-05, diferido a v1.5) — hoy solo SUPER_ADMIN da de alta clientes,
-// a mano, vía este endpoint o Swagger (Recomendación 1 del documento oficial).
+// Alta y listado de gimnasios (tenants del SaaS) por SUPER_ADMIN. El
+// onboarding self-serve (E6-05) es un flujo público aparte —
+// POST /auth/signup-gym, no este endpoint — porque crea el Gym y su cuenta
+// ADMIN dueña en un solo paso y necesita JwtService para auto-loguear al
+// dueño (ver AuthService.signupGym()).
 @ApiTags('gyms')
 @ApiBearerAuth()
 @Controller('gyms')

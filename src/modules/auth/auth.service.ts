@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from '../roles/entities/role.entity';
+import { Gym } from '../gyms/entities/gym.entity';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
@@ -15,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { TokenService } from '../../common/token/token.service';
 import { RegisterDto } from './dto/register.dto';
+import { SignupGymDto } from './dto/signup-gym.dto';
 
 @Injectable()
 export class AuthService {
@@ -27,6 +29,8 @@ export class AuthService {
     private readonly tokenService: TokenService,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    @InjectRepository(Gym)
+    private readonly gymRepository: Repository<Gym>,
   ) {}
 
   // 1. LOGIN
@@ -115,6 +119,67 @@ export class AuthService {
         name: newUser.name,
         email: newUser.email,
         status: newUser.status,
+      },
+    };
+  }
+
+  // 2b. ONBOARDING SELF-SERVE DE GIMNASIOS (E6-05, Epic 6 · v1.5) — un
+  // dueño de gimnasio prospecto da de alta su propio gimnasio y su cuenta
+  // ADMIN en un solo paso público, sin pasar por SUPER_ADMIN. Devuelve el
+  // mismo shape que login() (auto-login, evita un paso extra justo después
+  // de crear un tenant nuevo). Sin transacción explícita: si la creación
+  // del User falla después de crear el Gym, queda un Gym huérfano sin
+  // dueño — mismo criterio no-transaccional que el resto del código (p. ej.
+  // PlansService.create() tampoco revierte nada si el save local falla
+  // después de un alta exitosa en Mercado Pago); no hay uso de
+  // transacciones en ningún otro lado de este repo todavía.
+  async signupGym(dto: SignupGymDto) {
+    const { gymName, address, timezone, ownerName, email, password } = dto;
+
+    const userExists = await this.usersService.findByEmail(email);
+    if (userExists) {
+      throw new BadRequestException(
+        'El correo electrónico ya está registrado.',
+      );
+    }
+
+    const adminRole = await this.roleRepository.findOne({
+      where: { name: 'ADMIN' },
+    });
+    if (!adminRole) {
+      throw new NotFoundException("El rol 'ADMIN' no existe en el sistema.");
+    }
+
+    const gym = this.gymRepository.create({ name: gymName, address, timezone });
+    const savedGym = await this.gymRepository.save(gym);
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = await this.usersService.create({
+      name: ownerName,
+      email,
+      password: hashedPassword,
+      roleId: adminRole.id,
+      gymId: savedGym.id,
+    });
+
+    const payload = {
+      sub: newUser.id,
+      email: newUser.email,
+      role: adminRole.name,
+      gymId: savedGym.id,
+    };
+    const token = await this.jwtService.signAsync(payload);
+
+    return {
+      access_token: token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: adminRole.name,
+        gymId: savedGym.id,
       },
     };
   }

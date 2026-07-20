@@ -13,6 +13,7 @@ import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { TokenService } from '../../common/token/token.service';
 import { Role } from '../roles/entities/role.entity';
+import { Gym } from '../gyms/entities/gym.entity';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -26,6 +27,7 @@ describe('AuthService', () => {
   };
   let jwtService: { signAsync: jest.Mock };
   let roleRepository: { findOne: jest.Mock };
+  let gymRepository: { create: jest.Mock; save: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -40,6 +42,12 @@ describe('AuthService', () => {
       signAsync: jest.fn().mockResolvedValue('signed.jwt.token'),
     };
     roleRepository = { findOne: jest.fn() };
+    gymRepository = {
+      create: jest.fn((data: object) => data),
+      save: jest.fn((data: object) =>
+        Promise.resolve({ id: 'gym-new', ...data }),
+      ),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -54,6 +62,7 @@ describe('AuthService', () => {
         },
         TokenService,
         { provide: getRepositoryToken(Role), useValue: roleRepository },
+        { provide: getRepositoryToken(Gym), useValue: gymRepository },
       ],
     }).compile();
 
@@ -177,6 +186,77 @@ describe('AuthService', () => {
           gymId: 'gym-1',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('signupGym', () => {
+    const dto = {
+      gymName: 'PowerFit Norte',
+      address: 'Av. Siempre Viva 123',
+      timezone: 'America/Guayaquil',
+      ownerName: 'Ada Lovelace',
+      email: 'ada@powerfit.com',
+      password: 'contraseña123',
+    };
+
+    it('crea el gimnasio y su cuenta ADMIN, y devuelve un access_token (auto-login)', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-admin-uuid',
+        name: 'ADMIN',
+      });
+      usersService.create.mockResolvedValue({
+        id: 'user-owner',
+        name: 'Ada Lovelace',
+        email: 'ada@powerfit.com',
+      });
+
+      const result = await authService.signupGym(dto);
+
+      expect(gymRepository.create).toHaveBeenCalledWith({
+        name: 'PowerFit Norte',
+        address: 'Av. Siempre Viva 123',
+        timezone: 'America/Guayaquil',
+      });
+      expect(roleRepository.findOne).toHaveBeenCalledWith({
+        where: { name: 'ADMIN' },
+      });
+      expect(usersService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Ada Lovelace',
+          email: 'ada@powerfit.com',
+          roleId: 'role-admin-uuid',
+          gymId: 'gym-new',
+        }),
+      );
+      expect(result).toEqual({
+        access_token: 'signed.jwt.token',
+        user: {
+          id: 'user-owner',
+          email: 'ada@powerfit.com',
+          name: 'Ada Lovelace',
+          role: 'ADMIN',
+          gymId: 'gym-new',
+        },
+      });
+    });
+
+    it('lanza BadRequestException si el correo ya está registrado', async () => {
+      usersService.findByEmail.mockResolvedValue({ id: 'existing' });
+
+      await expect(authService.signupGym(dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(gymRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('lanza NotFoundException si el rol ADMIN no existe en el sistema', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      roleRepository.findOne.mockResolvedValue(null);
+
+      await expect(authService.signupGym(dto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
