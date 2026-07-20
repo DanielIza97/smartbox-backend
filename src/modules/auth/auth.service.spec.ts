@@ -27,7 +27,7 @@ describe('AuthService', () => {
   };
   let jwtService: { signAsync: jest.Mock };
   let roleRepository: { findOne: jest.Mock };
-  let gymRepository: { create: jest.Mock; save: jest.Mock };
+  let gymRepository: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -47,6 +47,7 @@ describe('AuthService', () => {
       save: jest.fn((data: object) =>
         Promise.resolve({ id: 'gym-new', ...data }),
       ),
+      find: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -116,6 +117,26 @@ describe('AuthService', () => {
       await expect(
         authService.login('demo@smartbox.com', 'incorrecta'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('listGymsForSignup', () => {
+    it('devuelve el listado de gimnasios acotado a id/name, ordenado por nombre', async () => {
+      gymRepository.find.mockResolvedValue([
+        { id: 'gym-1', name: 'Smart Fit' },
+        { id: 'gym-2', name: 'PowerFit Norte' },
+      ]);
+
+      const result = await authService.listGymsForSignup();
+
+      expect(gymRepository.find).toHaveBeenCalledWith({
+        select: { id: true, name: true },
+        order: { name: 'ASC' },
+      });
+      expect(result).toEqual([
+        { id: 'gym-1', name: 'Smart Fit' },
+        { id: 'gym-2', name: 'PowerFit Norte' },
+      ]);
     });
   });
 

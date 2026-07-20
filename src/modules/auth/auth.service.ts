@@ -74,6 +74,17 @@ export class AuthService {
     };
   }
 
+  // 1b. LISTADO PÚBLICO DE GIMNASIOS — para que /register (alta pública de
+  // CLIENT) pueda ofrecer un selector de a qué gimnasio unirse, sin
+  // necesitar GET /gyms (SUPER_ADMIN-only). Solo id/name, nada sensible ni
+  // operativo (nada de Mercado Pago, dirección, etc.).
+  async listGymsForSignup() {
+    return this.gymRepository.find({
+      select: { id: true, name: true },
+      order: { name: 'ASC' },
+    });
+  }
+
   // 2. REGISTRO
   async register(registerDto: Omit<RegisterDto, 'roleName'>) {
     const { email, password, name, gymId } = registerDto;

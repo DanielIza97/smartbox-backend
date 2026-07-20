@@ -33,6 +33,17 @@ export class AuthController {
     return this.authService.login(loginDto.email, loginDto.password);
   }
 
+  // 1b. LISTADO PÚBLICO DE GIMNASIOS (para el selector de /register)
+  @ApiOperation({
+    summary:
+      'Listado público de gimnasios (id/nombre) para elegir al registrarse',
+  })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Get('gyms')
+  async listGyms() {
+    return this.authService.listGymsForSignup();
+  }
+
   // 2. REGISTRO PÚBLICO (Cualquier usuario final se registra solo)
   @ApiOperation({ summary: 'Registro público (rol CLIENT por defecto)' })
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
