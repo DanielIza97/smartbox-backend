@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { GymsService } from './gyms.service';
 import { Gym } from './entities/gym.entity';
+import { Membership } from '../memberships/entities/membership.entity';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
 import { TokenService } from '../../common/token/token.service';
 
@@ -16,6 +17,15 @@ describe('GymsService', () => {
     findOne: jest.Mock;
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
+  };
+  let membershipRepository: { createQueryBuilder: jest.Mock };
+  let membershipQueryBuilder: {
+    innerJoin: jest.Mock;
+    select: jest.Mock;
+    addSelect: jest.Mock;
+    where: jest.Mock;
+    groupBy: jest.Mock;
+    getRawMany: jest.Mock;
   };
   let mercadoPagoService: {
     getAuthorizationUrl: jest.Mock;
@@ -42,6 +52,17 @@ describe('GymsService', () => {
       update: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnValue(qb),
     };
+    membershipQueryBuilder = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    membershipRepository = {
+      createQueryBuilder: jest.fn().mockReturnValue(membershipQueryBuilder),
+    };
     mercadoPagoService = {
       getAuthorizationUrl: jest
         .fn()
@@ -59,12 +80,51 @@ describe('GymsService', () => {
       providers: [
         GymsService,
         { provide: getRepositoryToken(Gym), useValue: gymRepository },
+        {
+          provide: getRepositoryToken(Membership),
+          useValue: membershipRepository,
+        },
         { provide: MercadoPagoService, useValue: mercadoPagoService },
         { provide: TokenService, useValue: tokenService },
       ],
     }).compile();
 
     service = module.get(GymsService);
+  });
+
+  describe('findAll', () => {
+    it('devuelve un array vacío sin consultar memberships si no hay gimnasios', async () => {
+      gymRepository.find.mockResolvedValue([]);
+
+      const result = await service.findAll();
+
+      expect(result).toEqual([]);
+      expect(membershipRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('agrega activeMembersCount por gimnasio, 0 si no aparece en el conteo', async () => {
+      gymRepository.find.mockResolvedValue([
+        { id: 'gym-a', name: 'Gym A' },
+        { id: 'gym-b', name: 'Gym B' },
+      ]);
+      membershipQueryBuilder.getRawMany.mockResolvedValue([
+        { gymId: 'gym-a', count: '3' },
+      ]);
+
+      const result = await service.findAll();
+
+      expect(membershipQueryBuilder.where).toHaveBeenCalledWith(
+        'membership.status = :status',
+        { status: 'active' },
+      );
+      expect(membershipQueryBuilder.groupBy).toHaveBeenCalledWith(
+        'plan.gym_id',
+      );
+      expect(result).toEqual([
+        { id: 'gym-a', name: 'Gym A', activeMembersCount: 3 },
+        { id: 'gym-b', name: 'Gym B', activeMembersCount: 0 },
+      ]);
+    });
   });
 
   describe('startMercadoPagoConnect', () => {

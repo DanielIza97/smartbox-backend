@@ -6,15 +6,22 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gym } from './entities/gym.entity';
+import { Membership } from '../memberships/entities/membership.entity';
 import { CreateGymDto } from './dto/create-gym.dto';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
 import { TokenService } from '../../common/token/token.service';
+
+export interface GymWithStats extends Gym {
+  activeMembersCount: number;
+}
 
 @Injectable()
 export class GymsService {
   constructor(
     @InjectRepository(Gym)
     private readonly gymRepository: Repository<Gym>,
+    @InjectRepository(Membership)
+    private readonly membershipRepository: Repository<Membership>,
     private readonly mercadoPagoService: MercadoPagoService,
     private readonly tokenService: TokenService,
   ) {}
@@ -24,8 +31,33 @@ export class GymsService {
     return await this.gymRepository.save(gym);
   }
 
-  async findAll(): Promise<Gym[]> {
-    return await this.gymRepository.find();
+  // Panel multi-tenant para SUPER_ADMIN (E6-05, segunda mitad) — un solo
+  // query agrupado para los socios activos de todos los gimnasios, en vez
+  // de un count por gym (evita N+1). Alcance acotado a esta única métrica,
+  // sesión de scoping con el usuario, 2026-07-20.
+  async findAll(): Promise<GymWithStats[]> {
+    const gyms = await this.gymRepository.find();
+    if (gyms.length === 0) {
+      return [];
+    }
+
+    const counts = await this.membershipRepository
+      .createQueryBuilder('membership')
+      .innerJoin('membership.plan', 'plan')
+      .select('plan.gym_id', 'gymId')
+      .addSelect('COUNT(*)', 'count')
+      .where('membership.status = :status', { status: 'active' })
+      .groupBy('plan.gym_id')
+      .getRawMany<{ gymId: string; count: string }>();
+
+    const countByGymId = new Map(
+      counts.map((row) => [row.gymId, parseInt(row.count, 10)]),
+    );
+
+    return gyms.map((gym) => ({
+      ...gym,
+      activeMembersCount: countByGymId.get(gym.id) ?? 0,
+    }));
   }
 
   async findOne(id: string): Promise<Gym> {
