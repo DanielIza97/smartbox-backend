@@ -74,7 +74,9 @@ export class ShiftsService {
 
   async findAll(requester: AuthenticatedUser): Promise<Shift[]> {
     if (requester.role === 'SUPER_ADMIN') {
-      return await this.shiftRepository.find({ relations: { staff: true } });
+      return await this.shiftRepository.find({
+        relations: { staff: { gym: true } },
+      });
     }
     return await this.shiftRepository.find({
       where: { staff: { gym: { id: requester.gymId ?? '' } } },

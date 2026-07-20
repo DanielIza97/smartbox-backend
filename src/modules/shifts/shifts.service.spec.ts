@@ -160,8 +160,11 @@ describe('ShiftsService', () => {
         gymId: null,
       });
 
+      // Necesita staff.gym para que el frontend pueda filtrar los turnos
+      // por gimnasio (mismo patrón que Plans/Classes) — bug encontrado en
+      // vivo, la relación faltaba solo en la rama de SUPER_ADMIN.
       expect(shiftRepository.find).toHaveBeenCalledWith({
-        relations: { staff: true },
+        relations: { staff: { gym: true } },
       });
     });
   });
