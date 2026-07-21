@@ -3,7 +3,6 @@ import {
   Post,
   Get,
   Body,
-  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -97,15 +96,5 @@ export class AuthController {
       resetPasswordDto.token,
       resetPasswordDto.newPassword,
     );
-  }
-
-  // 6. CONFIRMAR CAMBIO DE CORREO (enlace enviado por email)
-  @ApiOperation({
-    summary: 'Confirmar un cambio de correo con el token recibido',
-  })
-  @Get('verify-email-change')
-  @HttpCode(HttpStatus.OK)
-  async verifyEmailChange(@Query('token') token: string) {
-    return this.authService.verifyEmailChange(token);
   }
 }

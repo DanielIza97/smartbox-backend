@@ -291,17 +291,4 @@ export class AuthService {
 
     return { message: 'Tu contraseña ha sido actualizada con éxito.' };
   }
-
-  // 6. SOLICITAR CAMBIO DE EMAIL
-  async requestEmailChange(userId: string, newEmail: string) {
-    return await this.usersService.initiateEmailChange(userId, newEmail);
-  }
-
-  // 7. CONFIRMAR CAMBIO DE EMAIL
-  async verifyEmailChange(token: string) {
-    await this.usersService.confirmEmailChange(token);
-    return {
-      message: 'Tu nuevo correo ha sido verificado y actualizado exitosamente.',
-    };
-  }
 }
