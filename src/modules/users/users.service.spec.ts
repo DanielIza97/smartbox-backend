@@ -228,5 +228,60 @@ describe('UsersService', () => {
 
       expect(userRepository.save).toHaveBeenCalled();
     });
+
+    it('rechaza que un ADMIN se asigne (o asigne a otro) el rol SUPER_ADMIN', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'admin-a',
+        gym: { id: 'gym-a' },
+      });
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-super',
+        name: 'SUPER_ADMIN',
+      });
+
+      await expect(
+        service.update('admin-a', { roleId: 'role-super' }, gymAAdmin),
+      ).rejects.toThrow(ForbiddenException);
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un roleId inválido cuando lo asigna un no-SUPER_ADMIN', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        gym: { id: 'gym-a' },
+      });
+      roleRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('user-1', { roleId: 'role-inexistente' }, gymAAdmin),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('permite que un ADMIN reasigne un rol que no sea SUPER_ADMIN', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        gym: { id: 'gym-a' },
+      });
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-staff',
+        name: 'STAFF',
+      });
+
+      await service.update('user-1', { roleId: 'role-staff' }, gymAAdmin);
+
+      expect(userRepository.save).toHaveBeenCalled();
+    });
+
+    it('permite que un SUPER_ADMIN asigne el rol SUPER_ADMIN sin consultar el rol', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        gym: { id: 'gym-a' },
+      });
+
+      await service.update('user-1', { roleId: 'role-super' }, superAdmin);
+
+      expect(roleRepository.findOne).not.toHaveBeenCalled();
+      expect(userRepository.save).toHaveBeenCalled();
+    });
   });
 });

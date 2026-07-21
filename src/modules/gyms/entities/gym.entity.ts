@@ -45,7 +45,7 @@ export class Gym {
 
   @Column({
     name: 'mercadopago_token_expires_at',
-    type: 'timestamp',
+    type: 'timestamptz',
     nullable: true,
     select: false,
   })
@@ -63,7 +63,7 @@ export class Gym {
 
   @Column({
     name: 'mercadopago_oauth_state_expires_at',
-    type: 'timestamp',
+    type: 'timestamptz',
     nullable: true,
     select: false,
   })

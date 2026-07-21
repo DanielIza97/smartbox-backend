@@ -47,7 +47,7 @@ export class User {
 
   @Column({
     name: 'reset_password_expires',
-    type: 'timestamp',
+    type: 'timestamptz',
     nullable: true,
     select: false,
   })
@@ -70,7 +70,7 @@ export class User {
 
   @Column({
     name: 'email_change_token_expires',
-    type: 'timestamp',
+    type: 'timestamptz',
     nullable: true,
     select: false,
   })

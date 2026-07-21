@@ -179,6 +179,20 @@ export class UsersService {
       );
     }
 
+    if (roleId && requester.role !== 'SUPER_ADMIN') {
+      const targetRole = await this.roleRepository.findOne({
+        where: { id: roleId },
+      });
+      if (!targetRole) {
+        throw new BadRequestException('El rol especificado no es válido.');
+      }
+      if (targetRole.name === 'SUPER_ADMIN') {
+        throw new ForbiddenException(
+          'Solo un SUPER_ADMIN puede asignar el rol SUPER_ADMIN.',
+        );
+      }
+    }
+
     const updatedUser = this.userRepository.merge(user, {
       ...rest,
       role: roleId ? { id: roleId } : user.role,
