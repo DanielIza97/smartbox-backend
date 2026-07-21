@@ -102,9 +102,6 @@ export class AuthService {
       );
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
     const defaultRole = await this.roleRepository.findOne({
       where: { name: 'CLIENT' },
     });
@@ -117,7 +114,7 @@ export class AuthService {
     const newUser = await this.usersService.create({
       name,
       email,
-      password: hashedPassword,
+      password,
       roleId: defaultRole.id,
       gymId,
     });
@@ -164,13 +161,10 @@ export class AuthService {
     const gym = this.gymRepository.create({ name: gymName, address, timezone });
     const savedGym = await this.gymRepository.save(gym);
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
     const newUser = await this.usersService.create({
       name: ownerName,
       email,
-      password: hashedPassword,
+      password,
       roleId: adminRole.id,
       gymId: savedGym.id,
     });
@@ -227,13 +221,10 @@ export class AuthService {
       );
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
     const newUser = await this.usersService.create({
       name,
       email,
-      password: hashedPassword,
+      password,
       roleId: role.id,
       gymId: role.name === 'SUPER_ADMIN' ? undefined : gymId,
     });

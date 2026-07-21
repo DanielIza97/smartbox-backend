@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -28,9 +29,14 @@ export class UsersService {
     private readonly tokenService: TokenService,
   ) {}
 
-  // 1. Crear un usuario vinculando su Rol y su Gimnasio
+  // 1. Crear un usuario vinculando su Rol y su Gimnasio. Única fuente de
+  // hasheo de contraseñas para altas de usuario — AuthService.register()/
+  // signupGym()/registerInternal() pasan la contraseña en texto plano acá,
+  // nunca la hashean ellos mismos (antes sí lo hacían, duplicado; este
+  // método nunca hasheaba, así que POST /users almacenaba la contraseña
+  // en texto plano si alguien lo llamaba directamente — corregido acá).
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const { roleId, gymId, ...userData } = createUserDto;
+    const { roleId, gymId, password, ...userData } = createUserDto;
 
     const role = await this.roleRepository.findOne({
       where: { id: roleId },
@@ -58,8 +64,12 @@ export class UsersService {
       }
     }
 
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     const newUser = this.userRepository.create({
       ...userData,
+      password: hashedPassword,
       role: { id: roleId },
       gym: gymId ? { id: gymId } : null,
       status: 'active',

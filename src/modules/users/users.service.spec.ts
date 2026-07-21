@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 
 import { UsersService } from './users.service';
 import { User } from './user.entity';
@@ -147,6 +148,27 @@ describe('UsersService', () => {
           status: 'active',
         }),
       );
+    });
+
+    it('hashea la contraseña antes de guardarla — nunca en texto plano', async () => {
+      roleRepository.findOne.mockResolvedValue({
+        id: 'role-admin',
+        name: 'ADMIN',
+      });
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
+
+      const result = await service.create({
+        name: 'X',
+        email: 'x@smartbox.com',
+        password: 'contraseña123',
+        roleId: 'role-admin',
+        gymId: 'gym-a',
+      });
+
+      expect(result.password).not.toBe('contraseña123');
+      await expect(
+        bcrypt.compare('contraseña123', result.password),
+      ).resolves.toBe(true);
     });
   });
 

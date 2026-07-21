@@ -170,6 +170,11 @@ describe('AuthService', () => {
           gymId: 'gym-1',
         }),
       );
+      // UsersService.create() es la única fuente de hasheo — register() no
+      // debe hashear antes de pasarle la contraseña (evita double-hash).
+      expect(usersService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ password: 'contraseña123' }),
+      );
     });
 
     it('lanza BadRequestException si no se envía gymId', async () => {
@@ -248,6 +253,7 @@ describe('AuthService', () => {
           email: 'ada@powerfit.com',
           roleId: 'role-admin-uuid',
           gymId: 'gym-new',
+          password: 'contraseña123',
         }),
       );
       expect(result).toEqual({
@@ -344,7 +350,11 @@ describe('AuthService', () => {
       });
 
       expect(usersService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ roleId: 'role-super', gymId: undefined }),
+        expect.objectContaining({
+          roleId: 'role-super',
+          gymId: undefined,
+          password: 'contraseña123',
+        }),
       );
     });
   });
