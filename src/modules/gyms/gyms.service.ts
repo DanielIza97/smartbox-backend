@@ -9,7 +9,6 @@ import { Gym } from './entities/gym.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { CreateGymDto } from './dto/create-gym.dto';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
-import { TokenService } from '../../common/token/token.service';
 
 export interface GymWithStats extends Gym {
   activeMembersCount: number;
@@ -23,7 +22,6 @@ export class GymsService {
     @InjectRepository(Membership)
     private readonly membershipRepository: Repository<Membership>,
     private readonly mercadoPagoService: MercadoPagoService,
-    private readonly tokenService: TokenService,
   ) {}
 
   async create(dto: CreateGymDto): Promise<Gym> {
@@ -68,67 +66,36 @@ export class GymsService {
     return gym;
   }
 
-  // Modelo Marketplace: arranca el handshake OAuth para que ESTE gimnasio
-  // conecte su propia cuenta de Mercado Pago — la plata de sus socios va
-  // directo ahí, no a una cuenta de SmartBox.
-  async startMercadoPagoConnect(
+  // Modelo Marketplace sin Aplicación centralizada (ver mercadopago.service.ts):
+  // el gimnasio pega el access token que generó en su propia cuenta de
+  // Mercado Pago, junto con el secreto de firma de su propio webhook.
+  // Se valida contra GET /users/me antes de guardar nada — un token
+  // inválido/revocado nunca deja al gimnasio en un estado "conectado" a
+  // medias.
+  async connectMercadoPago(
     id: string,
-  ): Promise<{ authorizationUrl: string }> {
+    accessToken: string,
+    webhookSecret: string,
+  ): Promise<Gym> {
     await this.findOne(id);
 
-    const { token, expiresAt } = this.tokenService.generate(1);
+    let userId: string;
+    try {
+      ({ userId } =
+        await this.mercadoPagoService.verifyAccessToken(accessToken));
+    } catch {
+      throw new BadRequestException(
+        'El access token no es válido o fue revocado. Generá uno nuevo desde tu cuenta de Mercado Pago.',
+      );
+    }
+
     await this.gymRepository.update(id, {
-      mercadoPagoOauthState: token,
-      mercadoPagoOauthStateExpiresAt: expiresAt,
+      mercadoPagoUserId: userId,
+      mercadoPagoAccessToken: accessToken,
+      mercadoPagoWebhookSecret: webhookSecret,
     });
 
-    return {
-      authorizationUrl: this.mercadoPagoService.getAuthorizationUrl(token),
-    };
-  }
-
-  // Mercado Pago redirige acá después de que el dueño del gym autoriza —
-  // el state (no el gymId de la URL) es lo único confiable para identificar
-  // a qué gimnasio corresponde este code, así evitamos que alguien pise la
-  // conexión de otro gimnasio adivinando ids.
-  async completeMercadoPagoConnect(code: string, state: string): Promise<Gym> {
-    const gym = await this.gymRepository
-      .createQueryBuilder('gym')
-      .addSelect('gym.mercadoPagoOauthState')
-      .addSelect('gym.mercadoPagoOauthStateExpiresAt')
-      .where('gym.mercadopago_oauth_state = :state', { state })
-      .getOne();
-
-    if (
-      !gym ||
-      this.tokenService.isExpired(gym.mercadoPagoOauthStateExpiresAt ?? null)
-    ) {
-      throw new BadRequestException(
-        'El enlace de conexión con Mercado Pago es inválido o expiró. Iniciá la conexión de nuevo.',
-      );
-    }
-
-    const tokens = await this.mercadoPagoService.exchangeCodeForTokens(code);
-    if (!tokens.access_token || !tokens.refresh_token) {
-      throw new BadRequestException(
-        'Mercado Pago no devolvió credenciales válidas.',
-      );
-    }
-
-    const expiresAt = tokens.expires_in
-      ? new Date(Date.now() + tokens.expires_in * 1000)
-      : null;
-
-    await this.gymRepository.update(gym.id, {
-      mercadoPagoUserId: tokens.user_id ? String(tokens.user_id) : null,
-      mercadoPagoAccessToken: tokens.access_token,
-      mercadoPagoRefreshToken: tokens.refresh_token,
-      mercadoPagoTokenExpiresAt: expiresAt,
-      mercadoPagoOauthState: null,
-      mercadoPagoOauthStateExpiresAt: null,
-    });
-
-    return await this.findOne(gym.id);
+    return await this.findOne(id);
   }
 
   // Uso interno de Plans/Memberships — el access_token está oculto por
@@ -146,6 +113,25 @@ export class GymsService {
       );
     }
     return gym.mercadoPagoAccessToken;
+  }
+
+  // Uso interno del webhook (MembershipsService.handleWebhook) — cada
+  // gimnasio tiene su propio secreto de firma, así que hay que resolver
+  // primero a qué gimnasio pertenece la notificación (vía user_id) antes
+  // de poder verificarla.
+  async getMercadoPagoWebhookSecret(gymId: string): Promise<string> {
+    const gym = await this.gymRepository
+      .createQueryBuilder('gym')
+      .addSelect('gym.mercadoPagoWebhookSecret')
+      .where('gym.id = :gymId', { gymId })
+      .getOne();
+
+    if (!gym?.mercadoPagoWebhookSecret) {
+      throw new BadRequestException(
+        'Este gimnasio no tiene un secreto de webhook de Mercado Pago configurado.',
+      );
+    }
+    return gym.mercadoPagoWebhookSecret;
   }
 
   // Usado por el webhook de Mercado Pago (E2-03) para averiguar a qué

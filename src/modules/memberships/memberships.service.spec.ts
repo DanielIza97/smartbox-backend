@@ -60,6 +60,7 @@ describe('MembershipsService', () => {
   let mercadoPagoService: { clientFor: jest.Mock };
   let gymsService: {
     getMercadoPagoAccessToken: jest.Mock;
+    getMercadoPagoWebhookSecret: jest.Mock;
     findByMercadoPagoUserId: jest.Mock;
   };
   let configService: { get: jest.Mock; getOrThrow: jest.Mock };
@@ -118,6 +119,7 @@ describe('MembershipsService', () => {
     };
     gymsService = {
       getMercadoPagoAccessToken: jest.fn().mockResolvedValue('gym-a-token'),
+      getMercadoPagoWebhookSecret: jest.fn().mockResolvedValue(WEBHOOK_SECRET),
       findByMercadoPagoUserId: jest.fn(),
     };
     configService = {
@@ -273,9 +275,16 @@ describe('MembershipsService', () => {
     const ts = 1700000000000;
 
     it('rechaza con UnauthorizedException si la firma es inválida', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+
       await expect(
         service.handleWebhook(
-          { id: 1, type: 'subscription_preapproval', data: { id: dataId } },
+          {
+            id: 1,
+            type: 'subscription_preapproval',
+            data: { id: dataId },
+            user_id: 999,
+          },
           { xSignature: 'ts=123,v1=deadbeef', xRequestId: requestId },
         ),
       ).rejects.toThrow(UnauthorizedException);
@@ -284,28 +293,41 @@ describe('MembershipsService', () => {
     });
 
     it('rechaza si falta el header x-signature', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
+
       await expect(
         service.handleWebhook(
-          { id: 1, type: 'subscription_preapproval', data: { id: dataId } },
+          {
+            id: 1,
+            type: 'subscription_preapproval',
+            data: { id: dataId },
+            user_id: 999,
+          },
           { xRequestId: requestId },
         ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it('es idempotente: si el evento ya se procesó, no hace nada más', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-a' });
       webhookEventRepository.insert.mockRejectedValue(
         new Error('duplicate key value violates unique constraint'),
       );
 
       await service.handleWebhook(
-        { id: 1, type: 'subscription_preapproval', data: { id: dataId } },
+        {
+          id: 1,
+          type: 'subscription_preapproval',
+          data: { id: dataId },
+          user_id: 999,
+        },
         {
           xSignature: signWebhook(dataId, requestId, ts),
           xRequestId: requestId,
         },
       );
 
-      expect(gymsService.findByMercadoPagoUserId).not.toHaveBeenCalled();
+      expect(gymsService.getMercadoPagoAccessToken).not.toHaveBeenCalled();
     });
 
     it('ignora eventos que no son de preapproval ni de payment recurrente (p. ej. topic genérico payment) sin fallar', async () => {
@@ -317,14 +339,11 @@ describe('MembershipsService', () => {
         },
       );
 
-      expect(webhookEventRepository.insert).toHaveBeenCalledWith({
-        id: '1',
-        type: 'payment',
-      });
+      expect(webhookEventRepository.insert).not.toHaveBeenCalled();
       expect(gymsService.findByMercadoPagoUserId).not.toHaveBeenCalled();
     });
 
-    it('registra el evento pero no hace nada si no encuentra el gimnasio dueño', async () => {
+    it('no verifica firma ni registra el evento si no encuentra el gimnasio dueño', async () => {
       gymsService.findByMercadoPagoUserId.mockResolvedValue(null);
 
       await service.handleWebhook(
@@ -340,6 +359,7 @@ describe('MembershipsService', () => {
         },
       );
 
+      expect(webhookEventRepository.insert).not.toHaveBeenCalled();
       expect(gymsService.getMercadoPagoAccessToken).not.toHaveBeenCalled();
     });
 
@@ -454,6 +474,31 @@ describe('MembershipsService', () => {
         expect.objectContaining({ status: 'active' }),
       );
       expect(membershipRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('no verifica la firma con el secreto de otro gimnasio', async () => {
+      gymsService.findByMercadoPagoUserId.mockResolvedValue({ id: 'gym-b' });
+      gymsService.getMercadoPagoWebhookSecret.mockResolvedValue(
+        'otro-secreto-distinto',
+      );
+
+      await expect(
+        service.handleWebhook(
+          {
+            id: 1,
+            type: 'subscription_preapproval',
+            data: { id: dataId },
+            user_id: 999,
+          },
+          {
+            // Firmado con el secreto global WEBHOOK_SECRET, no con el de gym-b.
+            xSignature: signWebhook(dataId, requestId, ts),
+            xRequestId: requestId,
+          },
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(webhookEventRepository.insert).not.toHaveBeenCalled();
     });
 
     it('cancela la Membership existente cuando el PreApproval queda cancelled', async () => {

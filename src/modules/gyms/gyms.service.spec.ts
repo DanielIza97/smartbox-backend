@@ -6,7 +6,6 @@ import { GymsService } from './gyms.service';
 import { Gym } from './entities/gym.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
-import { TokenService } from '../../common/token/token.service';
 
 describe('GymsService', () => {
   let service: GymsService;
@@ -28,10 +27,8 @@ describe('GymsService', () => {
     getRawMany: jest.Mock;
   };
   let mercadoPagoService: {
-    getAuthorizationUrl: jest.Mock;
-    exchangeCodeForTokens: jest.Mock;
+    verifyAccessToken: jest.Mock;
   };
-  let tokenService: { generate: jest.Mock; isExpired: jest.Mock };
   let qb: {
     addSelect: jest.Mock;
     where: jest.Mock;
@@ -64,16 +61,7 @@ describe('GymsService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(membershipQueryBuilder),
     };
     mercadoPagoService = {
-      getAuthorizationUrl: jest
-        .fn()
-        .mockReturnValue('https://auth.mercadopago.com/xyz'),
-      exchangeCodeForTokens: jest.fn(),
-    };
-    tokenService = {
-      generate: jest
-        .fn()
-        .mockReturnValue({ token: 'state-token', expiresAt: new Date() }),
-      isExpired: jest.fn().mockReturnValue(false),
+      verifyAccessToken: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -85,7 +73,6 @@ describe('GymsService', () => {
           useValue: membershipRepository,
         },
         { provide: MercadoPagoService, useValue: mercadoPagoService },
-        { provide: TokenService, useValue: tokenService },
       ],
     }).compile();
 
@@ -127,85 +114,44 @@ describe('GymsService', () => {
     });
   });
 
-  describe('startMercadoPagoConnect', () => {
+  describe('connectMercadoPago', () => {
     it('lanza NotFoundException si el gimnasio no existe', async () => {
       gymRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.startMercadoPagoConnect('gym-x')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.connectMercadoPago('gym-x', 'token-abc', 'secret-abc'),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('guarda un state nuevo y devuelve la authorizationUrl', async () => {
+    it('lanza BadRequestException y no guarda nada si el token es inválido', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
-
-      const result = await service.startMercadoPagoConnect('gym-a');
-
-      const [gymId, update] = gymRepository.update.mock.calls[0] as [
-        string,
-        { mercadoPagoOauthState: string; mercadoPagoOauthStateExpiresAt: Date },
-      ];
-      expect(gymId).toBe('gym-a');
-      expect(update.mercadoPagoOauthState).toBe('state-token');
-      expect(update.mercadoPagoOauthStateExpiresAt).toBeInstanceOf(Date);
-      expect(mercadoPagoService.getAuthorizationUrl).toHaveBeenCalledWith(
-        'state-token',
+      mercadoPagoService.verifyAccessToken.mockRejectedValue(
+        new Error('invalid token'),
       );
-      expect(result).toEqual({
-        authorizationUrl: 'https://auth.mercadopago.com/xyz',
-      });
-    });
-  });
-
-  describe('completeMercadoPagoConnect', () => {
-    it('rechaza si no encuentra un gym con ese state', async () => {
-      qb.getOne.mockResolvedValue(null);
 
       await expect(
-        service.completeMercadoPagoConnect('code', 'bad-state'),
+        service.connectMercadoPago('gym-a', 'bad-token', 'secret-abc'),
       ).rejects.toThrow(BadRequestException);
+      expect(gymRepository.update).not.toHaveBeenCalled();
     });
 
-    it('rechaza si el state ya expiró', async () => {
-      qb.getOne.mockResolvedValue({
-        id: 'gym-a',
-        mercadoPagoOauthStateExpiresAt: new Date('2020-01-01'),
-      });
-      tokenService.isExpired.mockReturnValue(true);
-
-      await expect(
-        service.completeMercadoPagoConnect('code', 'state-token'),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('intercambia el code y guarda los tokens del gimnasio', async () => {
-      qb.getOne.mockResolvedValue({
-        id: 'gym-a',
-        mercadoPagoOauthStateExpiresAt: new Date(Date.now() + 60_000),
-      });
-      mercadoPagoService.exchangeCodeForTokens.mockResolvedValue({
-        access_token: 'access-xyz',
-        refresh_token: 'refresh-xyz',
-        user_id: 12345,
-        expires_in: 3600,
-      });
+    it('valida el token y guarda userId/accessToken/webhookSecret', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
+      mercadoPagoService.verifyAccessToken.mockResolvedValue({
+        userId: '12345',
+        email: 'gym@example.com',
+      });
 
-      await service.completeMercadoPagoConnect('the-code', 'state-token');
+      await service.connectMercadoPago('gym-a', 'token-abc', 'secret-abc');
 
-      expect(mercadoPagoService.exchangeCodeForTokens).toHaveBeenCalledWith(
-        'the-code',
+      expect(mercadoPagoService.verifyAccessToken).toHaveBeenCalledWith(
+        'token-abc',
       );
-      expect(gymRepository.update).toHaveBeenCalledWith(
-        'gym-a',
-        expect.objectContaining({
-          mercadoPagoUserId: '12345',
-          mercadoPagoAccessToken: 'access-xyz',
-          mercadoPagoRefreshToken: 'refresh-xyz',
-          mercadoPagoOauthState: null,
-          mercadoPagoOauthStateExpiresAt: null,
-        }),
-      );
+      expect(gymRepository.update).toHaveBeenCalledWith('gym-a', {
+        mercadoPagoUserId: '12345',
+        mercadoPagoAccessToken: 'token-abc',
+        mercadoPagoWebhookSecret: 'secret-abc',
+      });
     });
   });
 
@@ -229,6 +175,29 @@ describe('GymsService', () => {
 
       const token = await service.getMercadoPagoAccessToken('gym-a');
       expect(token).toBe('access-xyz');
+    });
+  });
+
+  describe('getMercadoPagoWebhookSecret', () => {
+    it('lanza BadRequestException si el gimnasio no tiene secreto configurado', async () => {
+      qb.getOne.mockResolvedValue({
+        id: 'gym-a',
+        mercadoPagoWebhookSecret: null,
+      });
+
+      await expect(
+        service.getMercadoPagoWebhookSecret('gym-a'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('devuelve el secreto cuando está configurado', async () => {
+      qb.getOne.mockResolvedValue({
+        id: 'gym-a',
+        mercadoPagoWebhookSecret: 'secret-xyz',
+      });
+
+      const secret = await service.getMercadoPagoWebhookSecret('gym-a');
+      expect(secret).toBe('secret-xyz');
     });
   });
 });

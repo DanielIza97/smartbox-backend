@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   Request,
@@ -11,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GymsService } from './gyms.service';
 import { CreateGymDto } from './dto/create-gym.dto';
+import { ConnectMercadoPagoDto } from './dto/connect-mercadopago.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -58,15 +60,23 @@ export class GymsController {
 
   @ApiOperation({
     summary:
-      'Iniciar la conexión OAuth con Mercado Pago para este gimnasio (modelo Marketplace)',
+      'Conectar la cuenta de Mercado Pago de este gimnasio (modelo Marketplace, token pegado a mano)',
   })
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @Get(':id/mercadopago/connect')
-  connectMercadoPago(@Param('id') id: string, @Request() req: RequestWithUser) {
+  @Put(':id/mercadopago/credentials')
+  connectMercadoPago(
+    @Param('id') id: string,
+    @Body() dto: ConnectMercadoPagoDto,
+    @Request() req: RequestWithUser,
+  ) {
     const requester = req.user!;
     if (requester.role !== 'SUPER_ADMIN' && requester.gymId !== id) {
       throw new ForbiddenException('No tenés acceso a este gimnasio.');
     }
-    return this.gymsService.startMercadoPagoConnect(id);
+    return this.gymsService.connectMercadoPago(
+      id,
+      dto.accessToken,
+      dto.webhookSecret,
+    );
   }
 }

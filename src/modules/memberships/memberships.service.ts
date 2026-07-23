@@ -194,32 +194,20 @@ export class MembershipsService {
   // "algo cambió, andá a mirar"). Maneja dos topics: `subscription_preapproval`
   // (alta/cancelación) y `subscription_authorized_payment` (cobro recurrente,
   // dunning — E2-05); el topic genérico `payment` no aplica acá.
+  // Sin Aplicación centralizada, no hay un secreto de firma único para toda
+  // la plataforma — cada gimnasio configura su propio webhook en su propia
+  // cuenta de Mercado Pago y tiene su propio secreto (GymsService.
+  // getMercadoPagoWebhookSecret). Por eso hay que resolver primero a qué
+  // gimnasio pertenece la notificación (vía user_id, ya presente en el
+  // body, sin necesidad de confiar en nada todavía — es solo una consulta
+  // de lectura) y recién ahí verificar la firma contra el secreto de ESE
+  // gimnasio. Ninguna mutación (el insert de idempotencia de más abajo)
+  // ocurre antes de verificar, así que la garantía de seguridad original
+  // se mantiene igual.
   async handleWebhook(
     payload: MercadoPagoWebhookPayload,
     headers: MercadoPagoWebhookHeaders,
   ): Promise<void> {
-    this.verifySignature(payload.data?.id, headers);
-
-    const notificationId =
-      payload.id !== undefined && payload.id !== null
-        ? String(payload.id)
-        : undefined;
-    if (!notificationId) {
-      return;
-    }
-
-    try {
-      await this.webhookEventRepository.insert({
-        id: notificationId,
-        type: payload.type ?? 'unknown',
-      });
-    } catch {
-      this.logger.debug(
-        `Webhook ${notificationId} ya procesado, ignorando reintento.`,
-      );
-      return;
-    }
-
     const dataId = payload.data?.id;
     const isPreapprovalEvent = PREAPPROVAL_WEBHOOK_TYPES.includes(
       payload.type ?? '',
@@ -239,6 +227,31 @@ export class MembershipsService {
     if (!gym) {
       this.logger.warn(
         `Webhook de Mercado Pago para un user_id sin gimnasio conectado: ${payload.user_id}`,
+      );
+      return;
+    }
+
+    const webhookSecret = await this.gymsService.getMercadoPagoWebhookSecret(
+      gym.id,
+    );
+    this.verifySignature(dataId, headers, webhookSecret);
+
+    const notificationId =
+      payload.id !== undefined && payload.id !== null
+        ? String(payload.id)
+        : undefined;
+    if (!notificationId) {
+      return;
+    }
+
+    try {
+      await this.webhookEventRepository.insert({
+        id: notificationId,
+        type: payload.type ?? 'unknown',
+      });
+    } catch {
+      this.logger.debug(
+        `Webhook ${notificationId} ya procesado, ignorando reintento.`,
       );
       return;
     }
@@ -351,15 +364,14 @@ export class MembershipsService {
   private verifySignature(
     dataId: string | undefined,
     headers: MercadoPagoWebhookHeaders,
+    secret: string,
   ): void {
     try {
       WebhookSignatureValidator.validate({
         xSignature: headers.xSignature,
         xRequestId: headers.xRequestId,
         dataId,
-        secret: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_WEBHOOK_SECRET',
-        ),
+        secret,
       });
     } catch {
       throw new UnauthorizedException('Firma de webhook inválida.');

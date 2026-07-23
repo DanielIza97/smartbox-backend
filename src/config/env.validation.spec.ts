@@ -16,12 +16,6 @@ describe('envValidationSchema', () => {
     DATABASE_USER: 'smartbox',
     DATABASE_PASSWORD: 'secret',
     JWT_SECRET: 'a-long-enough-secret-value',
-    MERCADOPAGO_ACCESS_TOKEN: 'TEST-xxx',
-    MERCADOPAGO_CLIENT_ID: 'client-id',
-    MERCADOPAGO_CLIENT_SECRET: 'client-secret',
-    MERCADOPAGO_REDIRECT_URI:
-      'http://localhost:3001/mercadopago/oauth/callback',
-    MERCADOPAGO_WEBHOOK_SECRET: 'webhook-secret',
   };
 
   const withoutKey = (key: string): Record<string, string> => {
@@ -62,52 +56,7 @@ describe('envValidationSchema', () => {
     expect(error?.message).toContain('JWT_SECRET');
   });
 
-  it('falla si falta MERCADOPAGO_ACCESS_TOKEN', () => {
-    const { error } = envValidationSchema.validate(
-      withoutKey('MERCADOPAGO_ACCESS_TOKEN'),
-      { abortEarly: false },
-    );
-
-    expect(error?.message).toContain('MERCADOPAGO_ACCESS_TOKEN');
-  });
-
-  it('falla si falta MERCADOPAGO_CLIENT_ID', () => {
-    const { error } = envValidationSchema.validate(
-      withoutKey('MERCADOPAGO_CLIENT_ID'),
-      { abortEarly: false },
-    );
-
-    expect(error?.message).toContain('MERCADOPAGO_CLIENT_ID');
-  });
-
-  it('falla si falta MERCADOPAGO_CLIENT_SECRET', () => {
-    const { error } = envValidationSchema.validate(
-      withoutKey('MERCADOPAGO_CLIENT_SECRET'),
-      { abortEarly: false },
-    );
-
-    expect(error?.message).toContain('MERCADOPAGO_CLIENT_SECRET');
-  });
-
-  it('falla si falta MERCADOPAGO_REDIRECT_URI', () => {
-    const { error } = envValidationSchema.validate(
-      withoutKey('MERCADOPAGO_REDIRECT_URI'),
-      { abortEarly: false },
-    );
-
-    expect(error?.message).toContain('MERCADOPAGO_REDIRECT_URI');
-  });
-
-  it('falla si falta MERCADOPAGO_WEBHOOK_SECRET', () => {
-    const { error } = envValidationSchema.validate(
-      withoutKey('MERCADOPAGO_WEBHOOK_SECRET'),
-      { abortEarly: false },
-    );
-
-    expect(error?.message).toContain('MERCADOPAGO_WEBHOOK_SECRET');
-  });
-
-  it('permite variables de entorno adicionales no declaradas en el schema', () => {
+  it('permite variables de entorno adicionales no declaradas en el schema (incluidas las MERCADOPAGO_* que ahora son por-gimnasio, no globales)', () => {
     const { error } = envValidationSchema.validate(
       { ...validEnv, PATH: '/usr/bin', SOME_OTHER_TOOL_VAR: 'x' },
       { abortEarly: false },

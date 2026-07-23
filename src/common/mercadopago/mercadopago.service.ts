@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   MercadoPagoConfig,
-  OAuth,
   Payment,
   PreApproval,
   PreApprovalPlan,
+  User,
 } from 'mercadopago';
 
 export interface GymMercadoPagoClient {
@@ -15,53 +14,24 @@ export interface GymMercadoPagoClient {
 }
 
 // Modelo Marketplace: SmartBox no cobra las membresías, cada gimnasio lo
-// hace en su propia cuenta de Mercado Pago (conectada vía OAuth). Este
-// servicio expone dos cosas distintas:
-//  1. El handshake OAuth (authorization URL, canje de code por tokens),
-//     que corre con las credenciales de la APP de SmartBox.
-//  2. Un factory (`clientFor`) para construir, por request, un cliente de
-//     Mercado Pago con el access_token propio de un gimnasio específico —
-//     Plans/Memberships nunca comparten un cliente entre gimnasios.
+// hace en su propia cuenta de Mercado Pago. Antes esto se conectaba vía
+// OAuth con una Aplicación de SmartBox — se abandonó porque crear una
+// Aplicación en Mercado Pago exige tener una empresa registrada en
+// Argentina, y Ecuador no está soportado para ese producto específico
+// (sí lo está para cuentas de vendedor comunes). Ahora cada gimnasio
+// genera su propio access token desde su propia cuenta (sin Aplicación
+// de por medio) y lo pega en SmartBox — ver GymsService.connectMercadoPago.
 @Injectable()
 export class MercadoPagoService {
-  readonly oauth: OAuth;
-
-  constructor(private readonly configService: ConfigService) {
-    const platformConfig = new MercadoPagoConfig({
-      accessToken: configService.getOrThrow<string>('MERCADOPAGO_ACCESS_TOKEN'),
-    });
-    this.oauth = new OAuth(platformConfig);
-  }
-
-  getAuthorizationUrl(state: string): string {
-    return this.oauth.getAuthorizationURL({
-      options: {
-        client_id: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_CLIENT_ID',
-        ),
-        redirect_uri: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_REDIRECT_URI',
-        ),
-        state,
-      },
-    });
-  }
-
-  async exchangeCodeForTokens(code: string) {
-    return await this.oauth.create({
-      body: {
-        client_id: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_CLIENT_ID',
-        ),
-        client_secret: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_CLIENT_SECRET',
-        ),
-        code,
-        redirect_uri: this.configService.getOrThrow<string>(
-          'MERCADOPAGO_REDIRECT_URI',
-        ),
-      },
-    });
+  // Valida un access token pegado a mano contra GET /users/me — si el
+  // token es inválido/revocado, el SDK rechaza la promesa y el caller
+  // (GymsService) lo traduce a un error explícito para el usuario.
+  async verifyAccessToken(
+    accessToken: string,
+  ): Promise<{ userId: string; email?: string }> {
+    const config = new MercadoPagoConfig({ accessToken });
+    const user = await new User(config).get();
+    return { userId: String(user.id), email: user.email };
   }
 
   clientFor(gymAccessToken: string): GymMercadoPagoClient {

@@ -21,9 +21,11 @@ export class Gym {
   timezone!: string;
 
   // Modelo Marketplace: cada gimnasio conecta su propia cuenta de Mercado
-  // Pago vía OAuth (GET /gyms/:id/mercadopago/connect) — la plata de sus
-  // socios va directo a esta cuenta, no a la de SmartBox. Token/refresh
-  // ocultos por default, igual que User.password.
+  // Pago — la plata de sus socios va directo a esta cuenta, no a la de
+  // SmartBox. Ya no es vía OAuth (ver nota en mercadopago.service.ts): el
+  // gimnasio pega su propio access token, generado desde su propia cuenta
+  // de Mercado Pago, sin que SmartBox tenga que operar una "Aplicación".
+  // Token/webhook secret ocultos por default, igual que User.password.
   @Column({ name: 'mercadopago_user_id', type: 'varchar', nullable: true })
   mercadoPagoUserId?: string | null;
 
@@ -35,39 +37,17 @@ export class Gym {
   })
   mercadoPagoAccessToken?: string | null;
 
+  // Sin Aplicación centralizada no hay un secreto de firma único para toda
+  // la plataforma — cada gimnasio configura su propio webhook en su propia
+  // cuenta de Mercado Pago y recibe su propio secreto, así que se guarda
+  // por gimnasio en vez de en una env var global.
   @Column({
-    name: 'mercadopago_refresh_token',
+    name: 'mercadopago_webhook_secret',
     type: 'varchar',
     nullable: true,
     select: false,
   })
-  mercadoPagoRefreshToken?: string | null;
-
-  @Column({
-    name: 'mercadopago_token_expires_at',
-    type: 'timestamptz',
-    nullable: true,
-    select: false,
-  })
-  mercadoPagoTokenExpiresAt?: Date | null;
-
-  // Estado efímero del handshake OAuth — se genera en /connect, se valida
-  // y limpia en /callback. TokenService ya resuelve la generación/expiración.
-  @Column({
-    name: 'mercadopago_oauth_state',
-    type: 'varchar',
-    nullable: true,
-    select: false,
-  })
-  mercadoPagoOauthState?: string | null;
-
-  @Column({
-    name: 'mercadopago_oauth_state_expires_at',
-    type: 'timestamptz',
-    nullable: true,
-    select: false,
-  })
-  mercadoPagoOauthStateExpiresAt?: Date | null;
+  mercadoPagoWebhookSecret?: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

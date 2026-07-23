@@ -34,19 +34,12 @@ export const envValidationSchema = Joi.object({
   // Orígenes permitidos por CORS, separados por comas (p. ej. "http://localhost:3000,https://admin.smartbox.com").
   CORS_ORIGINS: Joi.string().default('http://localhost:3000'),
 
-  // Credenciales de la app de Mercado Pago (modelo Marketplace/OAuth: cada
-  // gimnasio conecta su propia cuenta, ver Gym.mercadoPago*). ACCESS_TOKEN
-  // es el token propio de la app de SmartBox, requerido por el SDK para
-  // instanciar el cliente de OAuth aunque la autenticación real del
-  // intercambio de código vaya por client_id/client_secret en el body.
-  MERCADOPAGO_ACCESS_TOKEN: Joi.string().required(),
-  MERCADOPAGO_CLIENT_ID: Joi.string().required(),
-  MERCADOPAGO_CLIENT_SECRET: Joi.string().required(),
-  MERCADOPAGO_REDIRECT_URI: Joi.string().uri().required(),
-
-  // "Secret signature" de la app, configurada en Tus Integraciones →
-  // Webhooks. Se usa para verificar la firma de POST /memberships/webhook/mercadopago.
-  MERCADOPAGO_WEBHOOK_SECRET: Joi.string().required(),
+  // Ya no hay variables MERCADOPAGO_* globales — el modelo Marketplace
+  // dejó de usar OAuth con una Aplicación de SmartBox (exigía una empresa
+  // registrada en Argentina, no viable para Ecuador) y pasó a que cada
+  // gimnasio pegue su propio access token + secreto de webhook, guardados
+  // en Gym.mercadoPagoAccessToken/mercadoPagoWebhookSecret. Ver
+  // GymsService.connectMercadoPago / MercadoPagoService.verifyAccessToken.
 
   // Si se omite, Sentry.init() (src/instrument.ts) no envía nada — mismo
   // patrón que MAILTRAP_API_KEY, no hace falta cuenta de Sentry para
