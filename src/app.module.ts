@@ -23,6 +23,8 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { HealthModule } from './modules/health/health.module';
+import { CheckInsModule } from './modules/checkins/checkins.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { HealthModule } from './modules/health/health.module';
     ReservationsModule,
     ShiftsModule,
     ReportsModule,
+    CheckInsModule,
+    WaitlistModule,
   ],
   providers: [
     {

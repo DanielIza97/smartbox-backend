@@ -41,6 +41,17 @@ export interface RevenueReport {
   activeMembersCount: number;
 }
 
+export interface FinanceReport {
+  from: Date;
+  to: Date;
+  mrrCents: number;
+  arrCents: number;
+  activeMembersCount: number;
+  cancelledInRangeCount: number;
+  churnRate: number;
+  ltvCents: number | null;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -164,5 +175,74 @@ export class ReportsService {
       .getCount();
 
     return { from, to, days, totalCents, activeMembersCount };
+  }
+
+  // MRR/ARR/Churn/LTV (Fase 1 del roadmap post-v1.5). Fórmulas documentadas
+  // acá porque son aproximaciones deliberadas, no cálculos exactos:
+  //  - MRR: suma de price_cents de los planes de membresías 'active' del
+  //    gym — snapshot al momento de la consulta, igual criterio que
+  //    activeMembersCount en getRevenue (no filtrado por from/to).
+  //  - ARR: MRR × 12, sin query propia.
+  //  - Churn: cancelados en el rango / (activos ahora + cancelados en el
+  //    rango). No existe un snapshot histórico de "miembros activos al
+  //    inicio del período" en este esquema, así que se usa el conteo actual
+  //    como proxy — aproximación explícita, no un cálculo de cohortes real.
+  //  - LTV: (MRR / activeMembersCount) / churnRate. null si churnRate es 0
+  //    (sin churn no hay LTV finito que calcular; el frontend lo muestra
+  //    como "sin datos suficientes" en vez de Infinity).
+  async getFinance(
+    requester: AuthenticatedUser,
+    query: ReportQueryDto,
+  ): Promise<FinanceReport> {
+    const gymId = this.resolveGymId(requester, query);
+    const { from, to } = this.resolveRange(query);
+
+    const mrrCentsRaw = await this.membershipRepository
+      .createQueryBuilder('membership')
+      .innerJoin('membership.plan', 'plan')
+      .where('plan.gym_id = :gymId', { gymId })
+      .andWhere('membership.status = :status', { status: 'active' })
+      .select('SUM(plan.price_cents)', 'sum')
+      .getRawOne<{ sum: string | null }>();
+    const mrrCents = Number(mrrCentsRaw?.sum ?? 0);
+    const arrCents = mrrCents * 12;
+
+    const activeMembersCount = await this.membershipRepository
+      .createQueryBuilder('membership')
+      .innerJoin('membership.plan', 'plan')
+      .where('plan.gym_id = :gymId', { gymId })
+      .andWhere('membership.status = :status', { status: 'active' })
+      .getCount();
+
+    const cancelledInRangeCount = await this.membershipRepository
+      .createQueryBuilder('membership')
+      .innerJoin('membership.plan', 'plan')
+      .where('plan.gym_id = :gymId', { gymId })
+      .andWhere('membership.cancelled_at BETWEEN :from AND :to', {
+        from,
+        to,
+      })
+      .getCount();
+
+    const churnRate =
+      activeMembersCount + cancelledInRangeCount > 0
+        ? cancelledInRangeCount / (activeMembersCount + cancelledInRangeCount)
+        : 0;
+
+    const avgRevenuePerMemberCents =
+      activeMembersCount > 0 ? mrrCents / activeMembersCount : 0;
+    const ltvCents =
+      churnRate > 0 ? avgRevenuePerMemberCents / churnRate : null;
+
+    return {
+      from,
+      to,
+      mrrCents,
+      arrCents,
+      activeMembersCount,
+      cancelledInRangeCount,
+      churnRate,
+      ltvCents,
+    };
   }
 }

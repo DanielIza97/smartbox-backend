@@ -337,6 +337,7 @@ export class MembershipsService {
     if (!membership.mercadoPagoPreapprovalId) {
       await this.membershipRepository.update(membership.id, {
         status: 'cancelled',
+        cancelledAt: new Date(),
       });
       return;
     }
@@ -352,6 +353,7 @@ export class MembershipsService {
       });
       await this.membershipRepository.update(membership.id, {
         status: 'cancelled',
+        cancelledAt: new Date(),
       });
     } catch (error) {
       this.logger.error(
@@ -393,6 +395,7 @@ export class MembershipsService {
       if (existing) {
         await this.membershipRepository.update(existing.id, {
           status: 'cancelled',
+          cancelledAt: new Date(),
         });
       }
       return;

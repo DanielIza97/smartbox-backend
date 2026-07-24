@@ -522,9 +522,10 @@ describe('MembershipsService', () => {
         },
       );
 
-      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
-        status: 'cancelled',
-      });
+      expect(membershipRepository.update).toHaveBeenCalledWith(
+        'membership-1',
+        expect.objectContaining({ status: 'cancelled' }),
+      );
     });
   });
 
@@ -971,9 +972,10 @@ describe('MembershipsService', () => {
         id: 'preapproval-1',
         body: { status: 'cancelled' },
       });
-      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
-        status: 'cancelled',
-      });
+      expect(membershipRepository.update).toHaveBeenCalledWith(
+        'membership-1',
+        expect.objectContaining({ status: 'cancelled' }),
+      );
     });
 
     it('cancela localmente sin llamar a Mercado Pago si no hay preapproval asociado', async () => {
@@ -988,9 +990,10 @@ describe('MembershipsService', () => {
       await service.processScheduledCancellations();
 
       expect(subscriptionsApiMock.update).not.toHaveBeenCalled();
-      expect(membershipRepository.update).toHaveBeenCalledWith('membership-1', {
-        status: 'cancelled',
-      });
+      expect(membershipRepository.update).toHaveBeenCalledWith(
+        'membership-1',
+        expect.objectContaining({ status: 'cancelled' }),
+      );
     });
 
     it('deja cancelAtPeriodEnd sin tocar si falla la cancelación remota, para reintentar', async () => {

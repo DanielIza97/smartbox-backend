@@ -126,4 +126,44 @@ export class MailService {
 
     this.logger.log(`Correo de verificación de cambio enviado a ${email}`);
   }
+
+  // Primer uso de MailService fuera de auth — mismo patrón fail-open que
+  // los dos métodos de arriba. Se dispara desde WaitlistService.tryPromote
+  // cuando alguien pasa de lista de espera a reserva confirmada.
+  async sendWaitlistPromotedEmail(
+    email: string,
+    className: string,
+    startAt: Date,
+  ): Promise<void> {
+    if (!this.client) {
+      this.logger.warn(
+        `Omitiendo envío de correo a ${email}: Mailtrap no configurado.`,
+      );
+      return;
+    }
+
+    const formattedDate = startAt.toLocaleString('es-EC', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+    const subjectPrefix = this.isSandbox ? '[SANDBOX] ' : '';
+
+    await this.client.send({
+      from: { name: this.fromName, email: this.fromEmail },
+      to: [{ email }],
+      subject: `${subjectPrefix}¡Se liberó un cupo! - Smartbox`,
+      text: `Se liberó un cupo en ${className} (${formattedDate}) y quedaste anotado con reserva confirmada.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>¡Se liberó un cupo!</h2>
+          <p>Estabas en la lista de espera de <strong>${className}</strong> y se liberó un cupo.</p>
+          <p>Ya quedaste anotado con reserva confirmada para el <strong>${formattedDate}</strong>.</p>
+        </div>
+      `,
+    });
+
+    this.logger.log(
+      `Correo de promoción de lista de espera enviado a ${email}`,
+    );
+  }
 }

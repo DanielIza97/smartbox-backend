@@ -35,4 +35,13 @@ export class ReportsController {
   getRevenue(@Query() query: ReportQueryDto, @Request() req: RequestWithUser) {
     return this.reportsService.getRevenue(req.user!, query);
   }
+
+  @ApiOperation({
+    summary: 'MRR, ARR, churn y LTV del gimnasio en un rango de fechas',
+  })
+  @Roles('ADMIN')
+  @Get('finance')
+  getFinance(@Query() query: ReportQueryDto, @Request() req: RequestWithUser) {
+    return this.reportsService.getFinance(req.user!, query);
+  }
 }

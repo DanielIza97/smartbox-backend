@@ -55,6 +55,13 @@ export class Membership {
   @Column({ name: 'cancel_at_period_end', default: false })
   cancelAtPeriodEnd!: boolean;
 
+  // Cuándo pasó a 'cancelled' — no existía hasta el dashboard financiero
+  // (Fase 1 post-v1.5): sin esto no hay forma de calcular churn sobre un
+  // rango de fechas, solo el status actual. Se setea en
+  // MembershipsService.finalizeCancellation() al mismo tiempo que el status.
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
+  cancelledAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

@@ -11,6 +11,7 @@ import { Reservation } from './entities/reservation.entity';
 import { ClassOrResource } from '../classes/entities/class-or-resource.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
+import { WaitlistService } from '../waitlist/waitlist.service';
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
@@ -25,6 +26,7 @@ describe('ReservationsService', () => {
   };
   let classRepository: { findOne: jest.Mock };
   let membershipRepository: { findOne: jest.Mock };
+  let waitlistService: { tryPromote: jest.Mock };
 
   const client: AuthenticatedUser = {
     id: 'client-1',
@@ -62,6 +64,7 @@ describe('ReservationsService', () => {
     };
     classRepository = { findOne: jest.fn() };
     membershipRepository = { findOne: jest.fn() };
+    waitlistService = { tryPromote: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -78,6 +81,7 @@ describe('ReservationsService', () => {
           provide: getRepositoryToken(Membership),
           useValue: membershipRepository,
         },
+        { provide: WaitlistService, useValue: waitlistService },
       ],
     }).compile();
 
@@ -281,10 +285,12 @@ describe('ReservationsService', () => {
       );
     });
 
-    it('permite al dueño cancelar su propia reserva', async () => {
+    it('permite al dueño cancelar su propia reserva y promueve la lista de espera', async () => {
       reservationRepository.findOne.mockResolvedValue({
         id: 'res-1',
         userId: 'client-1',
+        classId: 'class-1',
+        startAt: nextMonday9am,
         status: 'confirmed',
         classOrResource: { gymId: 'gym-a' },
       });
@@ -305,6 +311,12 @@ describe('ReservationsService', () => {
         where: { id: 'res-1' },
         relations: { classOrResource: true },
       });
+      // Cupo liberado — intenta promover a quien esté primero en la lista
+      // de espera de ese mismo turno.
+      expect(waitlistService.tryPromote).toHaveBeenCalledWith(
+        'class-1',
+        nextMonday9am,
+      );
     });
 
     it('permite a un ADMIN del mismo gym cancelar la reserva de un socio', async () => {

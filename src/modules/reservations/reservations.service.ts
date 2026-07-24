@@ -13,6 +13,7 @@ import { ClassOrResource } from '../classes/entities/class-or-resource.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 import { isValidOccurrence } from '../classes/occurrence.util';
+import { WaitlistService } from '../waitlist/waitlist.service';
 
 @Injectable()
 export class ReservationsService {
@@ -23,6 +24,7 @@ export class ReservationsService {
     private readonly classRepository: Repository<ClassOrResource>,
     @InjectRepository(Membership)
     private readonly membershipRepository: Repository<Membership>,
+    private readonly waitlistService: WaitlistService,
   ) {}
 
   // Crear reserva (E3-03) — valida, en orden: la clase pertenece al gym del
@@ -151,6 +153,16 @@ export class ReservationsService {
     }
 
     await this.reservationRepository.update(id, { status: 'cancelled' });
+
+    // Cupo liberado — intenta promover a quien esté primero en la lista de
+    // espera de este mismo turno (Fase 1 del roadmap post-v1.5). No bloquea
+    // la respuesta de cancelación si algo falla acá; el propio
+    // WaitlistService ya maneja sus errores internamente sin propagarlos.
+    await this.waitlistService.tryPromote(
+      reservation.classId,
+      reservation.startAt,
+    );
+
     return await this.reservationRepository.findOneOrFail({
       where: { id },
       relations: { classOrResource: true },

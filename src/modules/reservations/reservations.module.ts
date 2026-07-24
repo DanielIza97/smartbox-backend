@@ -6,10 +6,12 @@ import { ClassOrResource } from '../classes/entities/class-or-resource.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { ReservationsService } from './reservations.service';
 import { ReservationsController } from './reservations.controller';
+import { WaitlistModule } from '../waitlist/waitlist.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Reservation, ClassOrResource, Membership]),
+    WaitlistModule,
   ],
   controllers: [ReservationsController],
   providers: [ReservationsService],

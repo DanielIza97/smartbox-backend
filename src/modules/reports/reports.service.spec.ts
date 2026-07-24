@@ -25,6 +25,8 @@ describe('ReportsService', () => {
     where: jest.Mock;
     andWhere: jest.Mock;
     getCount: jest.Mock;
+    select: jest.Mock;
+    getRawOne: jest.Mock;
   };
   let membershipRepository: { createQueryBuilder: jest.Mock };
 
@@ -60,6 +62,8 @@ describe('ReportsService', () => {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       getCount: jest.fn().mockResolvedValue(0),
+      select: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ sum: '0' }),
     };
     membershipRepository = {
       createQueryBuilder: jest.fn().mockReturnValue(membershipQueryBuilder),
@@ -174,6 +178,67 @@ describe('ReportsService', () => {
 
       expect(report.days).toEqual([]);
       expect(report.totalCents).toBe(0);
+    });
+  });
+
+  describe('getFinance', () => {
+    it('SUPER_ADMIN sin gymId en el query rechaza con BadRequestException', async () => {
+      await expect(service.getFinance(superAdmin, {})).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('calcula MRR/ARR desde la suma de price_cents de membresías activas', async () => {
+      membershipQueryBuilder.getRawOne.mockResolvedValue({ sum: '15000' });
+      membershipQueryBuilder.getCount
+        .mockResolvedValueOnce(10) // activeMembersCount
+        .mockResolvedValueOnce(0); // cancelledInRangeCount
+
+      const report = await service.getFinance(admin, {});
+
+      expect(report.mrrCents).toBe(15000);
+      expect(report.arrCents).toBe(15000 * 12);
+      expect(report.activeMembersCount).toBe(10);
+    });
+
+    it('churnRate 0 cuando no hay cancelaciones en el rango, LTV null', async () => {
+      membershipQueryBuilder.getRawOne.mockResolvedValue({ sum: '10000' });
+      membershipQueryBuilder.getCount
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(0);
+
+      const report = await service.getFinance(admin, {});
+
+      expect(report.churnRate).toBe(0);
+      expect(report.ltvCents).toBeNull();
+    });
+
+    it('calcula churnRate y LTV cuando hay cancelaciones en el rango', async () => {
+      // 8 activos + 2 cancelados en el rango → churn = 2/10 = 0.2
+      // avgRevenuePerMember = 10000/8 = 1250 → LTV = 1250/0.2 = 6250
+      membershipQueryBuilder.getRawOne.mockResolvedValue({ sum: '10000' });
+      membershipQueryBuilder.getCount
+        .mockResolvedValueOnce(8)
+        .mockResolvedValueOnce(2);
+
+      const report = await service.getFinance(admin, {});
+
+      expect(report.churnRate).toBe(0.2);
+      expect(report.ltvCents).toBe(6250);
+    });
+
+    it('devuelve MRR/ARR en cero si no hay membresías activas', async () => {
+      membershipQueryBuilder.getRawOne.mockResolvedValue({ sum: null });
+      membershipQueryBuilder.getCount
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
+
+      const report = await service.getFinance(admin, {});
+
+      expect(report.mrrCents).toBe(0);
+      expect(report.arrCents).toBe(0);
+      expect(report.churnRate).toBe(0);
+      expect(report.ltvCents).toBeNull();
     });
   });
 });
