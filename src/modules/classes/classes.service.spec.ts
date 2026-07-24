@@ -10,6 +10,7 @@ import { ClassesService } from './classes.service';
 import { ClassOrResource } from './entities/class-or-resource.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { Gym } from '../gyms/entities/gym.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
 describe('ClassesService', () => {
@@ -22,6 +23,7 @@ describe('ClassesService', () => {
   };
   let gymRepository: { findOne: jest.Mock };
   let reservationRepository: { count: jest.Mock };
+  let locationRepository: { findOne: jest.Mock };
 
   const admin: AuthenticatedUser = {
     id: 'admin-1',
@@ -45,6 +47,11 @@ describe('ClassesService', () => {
     };
     gymRepository = { findOne: jest.fn() };
     reservationRepository = { count: jest.fn().mockResolvedValue(0) };
+    locationRepository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'location-a', gymId: 'gym-a' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -58,6 +65,7 @@ describe('ClassesService', () => {
           provide: getRepositoryToken(Reservation),
           useValue: reservationRepository,
         },
+        { provide: getRepositoryToken(Location), useValue: locationRepository },
       ],
     }).compile();
 
@@ -73,6 +81,7 @@ describe('ClassesService', () => {
           dayOfWeek: 1,
           startTime: '09:00',
           durationMinutes: 60,
+          locationId: 'location-a',
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -87,12 +96,33 @@ describe('ClassesService', () => {
           dayOfWeek: 1,
           startTime: '09:00',
           durationMinutes: 60,
+          locationId: 'location-a',
           gymId: 'gym-x',
         }),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('crea la clase con el gymId dado', async () => {
+    it('rechaza con ForbiddenException si la sucursal es de otro gimnasio', async () => {
+      gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
+      });
+
+      await expect(
+        service.create({
+          name: 'Yoga',
+          capacity: 10,
+          dayOfWeek: 1,
+          startTime: '09:00',
+          durationMinutes: 60,
+          locationId: 'location-b',
+          gymId: 'gym-a',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('crea la clase con el gymId y locationId dados', async () => {
       gymRepository.findOne.mockResolvedValue({ id: 'gym-a' });
 
       const result = await service.create({
@@ -101,12 +131,17 @@ describe('ClassesService', () => {
         dayOfWeek: 1,
         startTime: '09:00',
         durationMinutes: 60,
+        locationId: 'location-a',
         gymId: 'gym-a',
       });
 
       expect(classRepository.save).toHaveBeenCalled();
       expect(result).toEqual(
-        expect.objectContaining({ name: 'Yoga', gymId: 'gym-a' }),
+        expect.objectContaining({
+          name: 'Yoga',
+          gymId: 'gym-a',
+          locationId: 'location-a',
+        }),
       );
     });
   });
@@ -122,7 +157,9 @@ describe('ClassesService', () => {
 
       await service.findAll(superAdmin);
 
-      expect(classRepository.find).toHaveBeenCalledWith();
+      expect(classRepository.find).toHaveBeenCalledWith({
+        relations: { location: true },
+      });
     });
 
     it('ADMIN ve solo las clases de su gimnasio', async () => {
@@ -132,6 +169,7 @@ describe('ClassesService', () => {
 
       expect(classRepository.find).toHaveBeenCalledWith({
         where: { gymId: 'gym-a' },
+        relations: { location: true },
       });
     });
   });

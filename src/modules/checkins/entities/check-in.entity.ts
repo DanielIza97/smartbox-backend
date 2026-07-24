@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { Gym } from '../../gyms/entities/gym.entity';
+import { Location } from '../../locations/entities/location.entity';
 import { Reservation } from '../../reservations/entities/reservation.entity';
 
 // Check-in físico (Fase 1 del roadmap post-v1.5) — evento separado de la
@@ -16,7 +17,9 @@ import { Reservation } from '../../reservations/entities/reservation.entity';
 // "la reserva es válida" con "la persona efectivamente vino" — quedan
 // separados. gymId va denormalizado acá (a diferencia de Reservation, que lo
 // hereda vía classOrResource) porque un check-in puede no tener ninguna
-// clase asociada (gimnasio libre).
+// clase asociada (gimnasio libre). locationId (Fase 1 post-v1.5, sucursales)
+// sigue el mismo criterio de denormalización directa por el mismo motivo:
+// un check-in walk-in tampoco tiene clase de la que heredar la sucursal.
 @Entity('check_ins')
 export class CheckIn {
   @PrimaryGeneratedColumn('uuid')
@@ -35,6 +38,13 @@ export class CheckIn {
 
   @Column({ name: 'gym_id' })
   gymId!: string;
+
+  @ManyToOne(() => Location)
+  @JoinColumn({ name: 'location_id' })
+  location!: Location;
+
+  @Column({ name: 'location_id' })
+  locationId!: string;
 
   @ManyToOne(() => Reservation, { nullable: true })
   @JoinColumn({ name: 'reservation_id' })

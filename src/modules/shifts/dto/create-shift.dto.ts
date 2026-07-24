@@ -29,4 +29,8 @@ export class CreateShiftDto {
     message: 'endTime debe tener formato HH:mm (24hs)',
   })
   endTime!: string;
+
+  @ApiProperty({ description: 'UUID de la sucursal donde trabaja este turno' })
+  @IsUUID()
+  locationId!: string;
 }

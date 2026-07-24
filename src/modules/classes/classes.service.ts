@@ -11,6 +11,7 @@ import { Reservation } from '../reservations/entities/reservation.entity';
 import { CreateClassDto } from './dto/create-class.dto';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
 import { Gym } from '../gyms/entities/gym.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 import { computeOccurrences } from './occurrence.util';
 
@@ -32,6 +33,8 @@ export class ClassesService {
     private readonly gymRepository: Repository<Gym>,
     @InjectRepository(Reservation)
     private readonly reservationRepository: Repository<Reservation>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
   ) {}
 
   async create(dto: CreateClassDto): Promise<ClassOrResource> {
@@ -45,6 +48,13 @@ export class ClassesService {
       throw new NotFoundException('El gimnasio especificado no existe.');
     }
 
+    const location = await this.locationRepository.findOne({
+      where: { id: dto.locationId },
+    });
+    if (!location || location.gymId !== gymId) {
+      throw new ForbiddenException('No tenés acceso a esa sucursal.');
+    }
+
     const classOrResource = this.classRepository.create({
       name: dto.name,
       capacity: dto.capacity,
@@ -52,16 +62,18 @@ export class ClassesService {
       startTime: dto.startTime,
       durationMinutes: dto.durationMinutes,
       gymId,
+      locationId: dto.locationId,
     });
     return await this.classRepository.save(classOrResource);
   }
 
   async findAll(requester: AuthenticatedUser): Promise<ClassOrResource[]> {
     if (requester.role === 'SUPER_ADMIN') {
-      return await this.classRepository.find();
+      return await this.classRepository.find({ relations: { location: true } });
     }
     return await this.classRepository.find({
       where: { gymId: requester.gymId ?? '' },
+      relations: { location: true },
     });
   }
 

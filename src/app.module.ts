@@ -25,6 +25,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { HealthModule } from './modules/health/health.module';
 import { CheckInsModule } from './modules/checkins/checkins.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { LocationsModule } from './modules/locations/locations.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { WaitlistModule } from './modules/waitlist/waitlist.module';
     ReportsModule,
     CheckInsModule,
     WaitlistModule,
+    LocationsModule,
   ],
   providers: [
     {

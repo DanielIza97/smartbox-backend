@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { Location } from '../../locations/entities/location.entity';
 
 // Horario de trabajo recurrente de un STAFF (E4-02) — desacoplado de
 // ClassOrResource a propósito (decisión de scoping, 2026-07-17): responde
@@ -25,6 +26,17 @@ export class Shift {
 
   @Column({ name: 'staff_id' })
   staffId!: string;
+
+  // Sucursal donde trabaja este turno (Fase 1 post-v1.5) — el STAFF no
+  // queda fijo a una sucursal (decisión de scoping, 2026-07-24), pero cada
+  // turno individual sí. Requerida, todo Gym nace con al menos una
+  // Location.
+  @ManyToOne(() => Location)
+  @JoinColumn({ name: 'location_id' })
+  location!: Location;
+
+  @Column({ name: 'location_id' })
+  locationId!: string;
 
   // 0 = domingo ... 6 = sábado (Date.getDay()).
   @Column({ name: 'day_of_week' })

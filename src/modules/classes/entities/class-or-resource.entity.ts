@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Gym } from '../../gyms/entities/gym.entity';
+import { Location } from '../../locations/entities/location.entity';
 
 // Plantilla recurrente semanal (Epic 3 · E3-01) — una fila = un turno que se
 // repite todas las semanas el mismo día/hora (p. ej. "Yoga" lunes 09:00, 60
@@ -26,6 +27,15 @@ export class ClassOrResource {
 
   @Column({ name: 'gym_id' })
   gymId!: string;
+
+  // Sucursal donde se dicta (Fase 1 post-v1.5) — requerida, todo Gym nace
+  // con al menos una Location, ver LocationsService.createDefault.
+  @ManyToOne(() => Location)
+  @JoinColumn({ name: 'location_id' })
+  location!: Location;
+
+  @Column({ name: 'location_id' })
+  locationId!: string;
 
   @Column()
   name!: string;

@@ -6,6 +6,7 @@ import { GymsService } from './gyms.service';
 import { Gym } from './entities/gym.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
+import { LocationsService } from '../locations/locations.service';
 
 describe('GymsService', () => {
   let service: GymsService;
@@ -29,6 +30,7 @@ describe('GymsService', () => {
   let mercadoPagoService: {
     verifyAccessToken: jest.Mock;
   };
+  let locationsService: { createDefault: jest.Mock };
   let qb: {
     addSelect: jest.Mock;
     where: jest.Mock;
@@ -63,6 +65,9 @@ describe('GymsService', () => {
     mercadoPagoService = {
       verifyAccessToken: jest.fn(),
     };
+    locationsService = {
+      createDefault: jest.fn().mockResolvedValue({ id: 'location-a' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -73,10 +78,34 @@ describe('GymsService', () => {
           useValue: membershipRepository,
         },
         { provide: MercadoPagoService, useValue: mercadoPagoService },
+        { provide: LocationsService, useValue: locationsService },
       ],
     }).compile();
 
     service = module.get(GymsService);
+  });
+
+  describe('create', () => {
+    it('crea el gym y una Location "Sucursal Principal" para él', async () => {
+      gymRepository.save.mockResolvedValue({
+        id: 'gym-new',
+        name: 'Gym Nuevo',
+        address: 'Av. Central 1',
+      });
+
+      const result = await service.create({
+        name: 'Gym Nuevo',
+        address: 'Av. Central 1',
+      });
+
+      expect(locationsService.createDefault).toHaveBeenCalledWith(
+        'gym-new',
+        'Av. Central 1',
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ id: 'gym-new', name: 'Gym Nuevo' }),
+      );
+    });
   });
 
   describe('findAll', () => {

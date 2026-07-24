@@ -9,6 +9,7 @@ import { Gym } from './entities/gym.entity';
 import { Membership } from '../memberships/entities/membership.entity';
 import { CreateGymDto } from './dto/create-gym.dto';
 import { MercadoPagoService } from '../../common/mercadopago/mercadopago.service';
+import { LocationsService } from '../locations/locations.service';
 
 export interface GymWithStats extends Gym {
   activeMembersCount: number;
@@ -22,11 +23,19 @@ export class GymsService {
     @InjectRepository(Membership)
     private readonly membershipRepository: Repository<Membership>,
     private readonly mercadoPagoService: MercadoPagoService,
+    private readonly locationsService: LocationsService,
   ) {}
 
+  // Sucursales (Fase 1 post-v1.5) — todo Gym nuevo nace con una Location
+  // "Sucursal Principal" (misma lógica que usa AuthService.signupGym() para
+  // el alta self-serve) para que Clases/Turnos/Check-ins nunca queden sin
+  // dónde apuntar. Sin transacción explícita: mismo criterio de riesgo
+  // aceptado que el resto del código no-transaccional de este repo.
   async create(dto: CreateGymDto): Promise<Gym> {
     const gym = this.gymRepository.create(dto);
-    return await this.gymRepository.save(gym);
+    const savedGym = await this.gymRepository.save(gym);
+    await this.locationsService.createDefault(savedGym.id, savedGym.address);
+    return savedGym;
   }
 
   // Panel multi-tenant para SUPER_ADMIN (E6-05, segunda mitad) — un solo

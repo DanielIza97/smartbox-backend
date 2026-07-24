@@ -3,11 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Shift } from './entities/shift.entity';
 import { User } from '../users/user.entity';
+import { Location } from '../locations/entities/location.entity';
 import { ShiftsService } from './shifts.service';
 import { ShiftsController } from './shifts.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Shift, User])],
+  imports: [TypeOrmModule.forFeature([Shift, User, Location])],
   controllers: [ShiftsController],
   providers: [ShiftsService],
   exports: [TypeOrmModule, ShiftsService],

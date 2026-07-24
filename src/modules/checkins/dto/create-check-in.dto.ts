@@ -17,4 +17,12 @@ export class CreateCheckInDto {
   @IsOptional()
   @IsUUID()
   userId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'UUID de la sucursal donde ocurre el check-in. Solo se usa (y es obligatorio) cuando no viene reservationId — con reservationId, la sucursal se hereda de la clase reservada.',
+  })
+  @IsOptional()
+  @IsUUID()
+  locationId?: string;
 }

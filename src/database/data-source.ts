@@ -12,6 +12,9 @@ import { PendingSubscription } from '../modules/memberships/entities/pending-sub
 import { ClassOrResource } from '../modules/classes/entities/class-or-resource.entity';
 import { Reservation } from '../modules/reservations/entities/reservation.entity';
 import { Shift } from '../modules/shifts/entities/shift.entity';
+import { CheckIn } from '../modules/checkins/entities/check-in.entity';
+import { WaitlistEntry } from '../modules/waitlist/entities/waitlist-entry.entity';
+import { Location } from '../modules/locations/entities/location.entity';
 
 // DataSource standalone para el CLI de TypeORM (migration:generate/run/revert).
 // No pasa por el ConfigModule de Nest — lee process.env directo (dotenv/config
@@ -35,6 +38,9 @@ export const AppDataSource = new DataSource({
     ClassOrResource,
     Reservation,
     Shift,
+    CheckIn,
+    WaitlistEntry,
+    Location,
   ],
   migrations: [__dirname + '/migrations/*{.ts,.js}'],
   synchronize: false,

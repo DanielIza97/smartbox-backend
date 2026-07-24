@@ -14,6 +14,7 @@ import { MailService } from '../mail/mail.service';
 import { TokenService } from '../../common/token/token.service';
 import { Role } from '../roles/entities/role.entity';
 import { Gym } from '../gyms/entities/gym.entity';
+import { LocationsService } from '../locations/locations.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   let jwtService: { signAsync: jest.Mock };
   let roleRepository: { findOne: jest.Mock };
   let gymRepository: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
+  let locationsService: { createDefault: jest.Mock };
 
   beforeEach(async () => {
     usersService = {
@@ -49,6 +51,9 @@ describe('AuthService', () => {
       ),
       find: jest.fn().mockResolvedValue([]),
     };
+    locationsService = {
+      createDefault: jest.fn().mockResolvedValue({ id: 'location-a' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -64,6 +69,7 @@ describe('AuthService', () => {
         TokenService,
         { provide: getRepositoryToken(Role), useValue: roleRepository },
         { provide: getRepositoryToken(Gym), useValue: gymRepository },
+        { provide: LocationsService, useValue: locationsService },
       ],
     }).compile();
 
@@ -247,6 +253,10 @@ describe('AuthService', () => {
       expect(roleRepository.findOne).toHaveBeenCalledWith({
         where: { name: 'ADMIN' },
       });
+      expect(locationsService.createDefault).toHaveBeenCalledWith(
+        'gym-new',
+        'Av. Siempre Viva 123',
+      );
       expect(usersService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Ada Lovelace',

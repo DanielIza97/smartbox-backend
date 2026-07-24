@@ -9,6 +9,7 @@ import { LessThan, MoreThan, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { CreateShiftDto } from './dto/create-shift.dto';
 import { User } from '../users/user.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
 @Injectable()
@@ -18,6 +19,8 @@ export class ShiftsService {
     private readonly shiftRepository: Repository<Shift>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
   ) {}
 
   // Alta de turno (E4-02) — el gimnasio se resuelve transitivamente vía el
@@ -45,6 +48,13 @@ export class ShiftsService {
       throw new ForbiddenException('No tenés acceso a este miembro del staff.');
     }
 
+    const location = await this.locationRepository.findOne({
+      where: { id: dto.locationId },
+    });
+    if (!location || location.gymId !== staff.gym?.id) {
+      throw new ForbiddenException('No tenés acceso a esa sucursal.');
+    }
+
     if (dto.startTime >= dto.endTime) {
       throw new BadRequestException('startTime debe ser anterior a endTime.');
     }
@@ -68,6 +78,7 @@ export class ShiftsService {
       dayOfWeek: dto.dayOfWeek,
       startTime: dto.startTime,
       endTime: dto.endTime,
+      locationId: dto.locationId,
     });
     return await this.shiftRepository.save(shift);
   }
@@ -75,12 +86,12 @@ export class ShiftsService {
   async findAll(requester: AuthenticatedUser): Promise<Shift[]> {
     if (requester.role === 'SUPER_ADMIN') {
       return await this.shiftRepository.find({
-        relations: { staff: { gym: true } },
+        relations: { staff: { gym: true }, location: true },
       });
     }
     return await this.shiftRepository.find({
       where: { staff: { gym: { id: requester.gymId ?? '' } } },
-      relations: { staff: { gym: true } },
+      relations: { staff: { gym: true }, location: true },
     });
   }
 

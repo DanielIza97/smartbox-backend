@@ -16,6 +16,7 @@ import { MailModule } from '../mail/mail.module';
 import { TokenModule } from '../../common/token/token.module';
 import { Role } from '../roles/entities/role.entity';
 import { Gym } from '../gyms/entities/gym.entity';
+import { LocationsModule } from '../locations/locations.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Gym } from '../gyms/entities/gym.entity';
     RolesModule,
     MailModule,
     TokenModule,
+    LocationsModule,
     TypeOrmModule.forFeature([Role, Gym]),
 
     JwtModule.registerAsync({

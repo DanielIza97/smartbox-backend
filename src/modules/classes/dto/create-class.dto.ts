@@ -45,6 +45,10 @@ export class CreateClassDto {
   @Min(1)
   durationMinutes!: number;
 
+  @ApiProperty({ description: 'UUID de la sucursal donde se dicta la clase' })
+  @IsUUID()
+  locationId!: string;
+
   @ApiPropertyOptional({
     description:
       'UUID del gimnasio dueño de la clase. Obligatorio solo para SUPER_ADMIN — un ADMIN siempre crea la clase de su propio gimnasio.',

@@ -5,6 +5,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
 import { Shift } from './entities/shift.entity';
 import { User } from '../users/user.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
 describe('ShiftsService', () => {
@@ -16,6 +17,7 @@ describe('ShiftsService', () => {
     save: jest.Mock;
   };
   let userRepository: { findOne: jest.Mock };
+  let locationRepository: { findOne: jest.Mock };
 
   const admin: AuthenticatedUser = {
     id: 'admin-1',
@@ -38,12 +40,18 @@ describe('ShiftsService', () => {
       save: jest.fn((data: object) => Promise.resolve(data)),
     };
     userRepository = { findOne: jest.fn() };
+    locationRepository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'location-a', gymId: 'gym-a' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ShiftsService,
         { provide: getRepositoryToken(Shift), useValue: shiftRepository },
         { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: getRepositoryToken(Location), useValue: locationRepository },
       ],
     }).compile();
 
@@ -56,6 +64,7 @@ describe('ShiftsService', () => {
       dayOfWeek: 1,
       startTime: '09:00',
       endTime: '17:00',
+      locationId: 'location-a',
     };
 
     it('lanza NotFoundException si el usuario no existe', async () => {
@@ -81,6 +90,18 @@ describe('ShiftsService', () => {
       userRepository.findOne.mockResolvedValue({
         ...staffUser,
         gym: { id: 'gym-b' },
+      });
+
+      await expect(service.create(dto, admin)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('rechaza con ForbiddenException si la sucursal es de otro gimnasio', async () => {
+      userRepository.findOne.mockResolvedValue(staffUser);
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
       });
 
       await expect(service.create(dto, admin)).rejects.toThrow(
@@ -116,6 +137,7 @@ describe('ShiftsService', () => {
           dayOfWeek: 1,
           startTime: '09:00',
           endTime: '17:00',
+          locationId: 'location-a',
         }),
       );
       expect(result).toEqual(expect.objectContaining({ staffId: 'staff-1' }));
@@ -125,6 +147,10 @@ describe('ShiftsService', () => {
       userRepository.findOne.mockResolvedValue({
         ...staffUser,
         gym: { id: 'gym-b' },
+      });
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
       });
 
       const superAdmin: AuthenticatedUser = {
@@ -146,7 +172,7 @@ describe('ShiftsService', () => {
 
       expect(shiftRepository.find).toHaveBeenCalledWith({
         where: { staff: { gym: { id: 'gym-a' } } },
-        relations: { staff: { gym: true } },
+        relations: { staff: { gym: true }, location: true },
       });
     });
 
@@ -164,7 +190,7 @@ describe('ShiftsService', () => {
       // por gimnasio (mismo patrón que Plans/Classes) — bug encontrado en
       // vivo, la relación faltaba solo en la rama de SUPER_ADMIN.
       expect(shiftRepository.find).toHaveBeenCalledWith({
-        relations: { staff: { gym: true } },
+        relations: { staff: { gym: true }, location: true },
       });
     });
   });

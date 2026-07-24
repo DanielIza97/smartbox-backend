@@ -17,6 +17,7 @@ import { MailService } from '../mail/mail.service';
 import { TokenService } from '../../common/token/token.service';
 import { RegisterDto } from './dto/register.dto';
 import { SignupGymDto } from './dto/signup-gym.dto';
+import { LocationsService } from '../locations/locations.service';
 
 @Injectable()
 export class AuthService {
@@ -27,6 +28,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly tokenService: TokenService,
+    private readonly locationsService: LocationsService,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(Gym)
@@ -136,11 +138,14 @@ export class AuthService {
   // ADMIN en un solo paso público, sin pasar por SUPER_ADMIN. Devuelve el
   // mismo shape que login() (auto-login, evita un paso extra justo después
   // de crear un tenant nuevo). Sin transacción explícita: si la creación
-  // del User falla después de crear el Gym, queda un Gym huérfano sin
-  // dueño — mismo criterio no-transaccional que el resto del código (p. ej.
-  // PlansService.create() tampoco revierte nada si el save local falla
-  // después de un alta exitosa en Mercado Pago); no hay uso de
-  // transacciones en ningún otro lado de este repo todavía.
+  // de la Location default o del User falla después de crear el Gym, queda
+  // un Gym huérfano sin sucursal/dueño — mismo criterio no-transaccional
+  // que el resto del código (p. ej. PlansService.create() tampoco revierte
+  // nada si el save local falla después de un alta exitosa en Mercado
+  // Pago); no hay uso de transacciones en ningún otro lado de este repo
+  // todavía. Crea también una Location "Sucursal Principal" (Fase 1
+  // post-v1.5, mismo criterio que GymsService.create()) para que el gym
+  // nuevo nunca quede sin dónde atar Clases/Turnos/Check-ins.
   async signupGym(dto: SignupGymDto) {
     const { gymName, address, timezone, ownerName, email, password } = dto;
 
@@ -160,6 +165,7 @@ export class AuthService {
 
     const gym = this.gymRepository.create({ name: gymName, address, timezone });
     const savedGym = await this.gymRepository.save(gym);
+    await this.locationsService.createDefault(savedGym.id, savedGym.address);
 
     const newUser = await this.usersService.create({
       name: ownerName,

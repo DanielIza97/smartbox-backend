@@ -9,6 +9,7 @@ import { IsNull, Repository } from 'typeorm';
 import { CheckIn } from './entities/check-in.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { User } from '../users/user.entity';
+import { Location } from '../locations/entities/location.entity';
 import { CreateCheckInDto } from './dto/create-check-in.dto';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
@@ -21,6 +22,8 @@ export class CheckInsService {
     private readonly reservationRepository: Repository<Reservation>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
   ) {}
 
   // Un CLIENT solo puede registrarse a sí mismo (ignora cualquier userId
@@ -66,9 +69,12 @@ export class CheckInsService {
     }
 
     let reservationId: string | null = null;
+    let locationId: string;
+
     if (dto.reservationId) {
       const reservation = await this.reservationRepository.findOne({
         where: { id: dto.reservationId },
+        relations: { classOrResource: true },
       });
       if (!reservation) {
         throw new NotFoundException('Reserva no encontrada.');
@@ -88,11 +94,30 @@ export class CheckInsService {
         );
       }
       reservationId = reservation.id;
+      // Sucursal heredada de la clase reservada — no se pide en el DTO en
+      // este camino (Fase 1 post-v1.5, sucursales).
+      locationId = reservation.classOrResource.locationId;
+    } else {
+      // Check-in walk-in (sin reserva, gimnasio libre) — la sucursal no se
+      // puede inferir de ningún lado, así que se exige explícita.
+      if (!dto.locationId) {
+        throw new BadRequestException(
+          'Indicá la sucursal (locationId) para un check-in sin reserva.',
+        );
+      }
+      const location = await this.locationRepository.findOne({
+        where: { id: dto.locationId },
+      });
+      if (!location || location.gymId !== gymId) {
+        throw new ForbiddenException('No tenés acceso a esa sucursal.');
+      }
+      locationId = location.id;
     }
 
     const checkIn = this.checkInRepository.create({
       userId,
       gymId,
+      locationId,
       reservationId,
       checkedInAt: new Date(),
     });
@@ -128,16 +153,19 @@ export class CheckInsService {
     if (requester.role === 'CLIENT') {
       return await this.checkInRepository.find({
         where: { userId: requester.id },
+        relations: { location: true },
         order: { checkedInAt: 'DESC' },
       });
     }
     if (requester.role === 'SUPER_ADMIN') {
       return await this.checkInRepository.find({
+        relations: { location: true },
         order: { checkedInAt: 'DESC' },
       });
     }
     return await this.checkInRepository.find({
       where: { gymId: requester.gymId ?? '' },
+      relations: { location: true },
       order: { checkedInAt: 'DESC' },
     });
   }

@@ -10,6 +10,7 @@ import { CheckInsService } from './checkins.service';
 import { CheckIn } from './entities/check-in.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { User } from '../users/user.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
 describe('CheckInsService', () => {
@@ -24,6 +25,7 @@ describe('CheckInsService', () => {
   };
   let reservationRepository: { findOne: jest.Mock };
   let userRepository: { findOne: jest.Mock };
+  let locationRepository: { findOne: jest.Mock };
 
   const client: AuthenticatedUser = {
     id: 'client-1',
@@ -49,6 +51,11 @@ describe('CheckInsService', () => {
     };
     reservationRepository = { findOne: jest.fn() };
     userRepository = { findOne: jest.fn() };
+    locationRepository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'location-a', gymId: 'gym-a' }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -59,6 +66,7 @@ describe('CheckInsService', () => {
           useValue: reservationRepository,
         },
         { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: getRepositoryToken(Location), useValue: locationRepository },
       ],
     }).compile();
 
@@ -68,7 +76,7 @@ describe('CheckInsService', () => {
   describe('checkIn', () => {
     it('CLIENT se registra a sí mismo, ignorando cualquier userId del body', async () => {
       const result = await service.checkIn(
-        { userId: 'otro-id-cualquiera' },
+        { userId: 'otro-id-cualquiera', locationId: 'location-a' },
         client,
       );
 
@@ -109,11 +117,31 @@ describe('CheckInsService', () => {
         gym: { id: 'gym-a' },
       });
 
-      const result = await service.checkIn({ userId: 'client-2' }, staff);
+      const result = await service.checkIn(
+        { userId: 'client-2', locationId: 'location-a' },
+        staff,
+      );
 
       expect(result).toEqual(
         expect.objectContaining({ userId: 'client-2', gymId: 'gym-a' }),
       );
+    });
+
+    it('walk-in sin locationId rechaza con BadRequestException', async () => {
+      await expect(
+        service.checkIn({ userId: 'otro-id-cualquiera' }, client),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('walk-in con locationId de otro gimnasio rechaza con ForbiddenException', async () => {
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
+      });
+
+      await expect(
+        service.checkIn({ locationId: 'location-b' }, client),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('rechaza si la reserva indicada no existe', async () => {
@@ -152,17 +180,21 @@ describe('CheckInsService', () => {
       ).rejects.toThrow('Ya hay un check-in activo para esta reserva.');
     });
 
-    it('registra el check-in vinculado a la reserva cuando todo es válido', async () => {
+    it('registra el check-in vinculado a la reserva cuando todo es válido, heredando la sucursal de la clase', async () => {
       reservationRepository.findOne.mockResolvedValue({
         id: 'res-1',
         userId: 'client-1',
         status: 'confirmed',
+        classOrResource: { locationId: 'location-a' },
       });
 
       const result = await service.checkIn({ reservationId: 'res-1' }, client);
 
       expect(result).toEqual(
-        expect.objectContaining({ reservationId: 'res-1' }),
+        expect.objectContaining({
+          reservationId: 'res-1',
+          locationId: 'location-a',
+        }),
       );
     });
   });
@@ -233,6 +265,7 @@ describe('CheckInsService', () => {
 
       expect(checkInRepository.find).toHaveBeenCalledWith({
         where: { userId: 'client-1' },
+        relations: { location: true },
         order: { checkedInAt: 'DESC' },
       });
     });
@@ -244,6 +277,7 @@ describe('CheckInsService', () => {
 
       expect(checkInRepository.find).toHaveBeenCalledWith({
         where: { gymId: 'gym-a' },
+        relations: { location: true },
         order: { checkedInAt: 'DESC' },
       });
     });
@@ -259,6 +293,7 @@ describe('CheckInsService', () => {
       });
 
       expect(checkInRepository.find).toHaveBeenCalledWith({
+        relations: { location: true },
         order: { checkedInAt: 'DESC' },
       });
     });
