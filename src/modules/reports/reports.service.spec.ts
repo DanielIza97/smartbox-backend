@@ -1,12 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 import { ReportsService } from './reports.service';
 import { ClassOrResource } from '../classes/entities/class-or-resource.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { Invoice } from '../memberships/entities/invoice.entity';
 import { Membership } from '../memberships/entities/membership.entity';
+import { CheckIn } from '../checkins/entities/check-in.entity';
+import { Location } from '../locations/entities/location.entity';
 import { AuthenticatedUser } from '../auth/types/auth.types';
 
 describe('ReportsService', () => {
@@ -29,6 +31,13 @@ describe('ReportsService', () => {
     getRawOne: jest.Mock;
   };
   let membershipRepository: { createQueryBuilder: jest.Mock };
+  let checkInQueryBuilder: {
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    getCount: jest.Mock;
+  };
+  let checkInRepository: { createQueryBuilder: jest.Mock };
+  let locationRepository: { findOne: jest.Mock };
 
   const admin: AuthenticatedUser = {
     id: 'admin-1',
@@ -69,6 +78,20 @@ describe('ReportsService', () => {
       createQueryBuilder: jest.fn().mockReturnValue(membershipQueryBuilder),
     };
 
+    checkInQueryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(0),
+    };
+    checkInRepository = {
+      createQueryBuilder: jest.fn().mockReturnValue(checkInQueryBuilder),
+    };
+    locationRepository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'location-a', gymId: 'gym-a' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReportsService,
@@ -85,6 +108,8 @@ describe('ReportsService', () => {
           provide: getRepositoryToken(Membership),
           useValue: membershipRepository,
         },
+        { provide: getRepositoryToken(CheckIn), useValue: checkInRepository },
+        { provide: getRepositoryToken(Location), useValue: locationRepository },
       ],
     }).compile();
 
@@ -146,6 +171,28 @@ describe('ReportsService', () => {
       expect(report.slots).toEqual([]);
       expect(report.averageOccupancyRate).toBe(0);
     });
+
+    it('con locationId, filtra las clases por esa sucursal (filtro exacto)', async () => {
+      await service.getOccupancy(admin, { locationId: 'location-a' });
+
+      expect(locationRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'location-a' },
+      });
+      expect(classRepository.find).toHaveBeenCalledWith({
+        where: { gymId: 'gym-a', locationId: 'location-a' },
+      });
+    });
+
+    it('rechaza con ForbiddenException si la sucursal es de otro gimnasio', async () => {
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
+      });
+
+      await expect(
+        service.getOccupancy(admin, { locationId: 'location-b' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   describe('getRevenue', () => {
@@ -178,6 +225,42 @@ describe('ReportsService', () => {
 
       expect(report.days).toEqual([]);
       expect(report.totalCents).toBe(0);
+    });
+
+    it('con locationId, agrega una estimación proporcional según check-ins', async () => {
+      invoiceQueryBuilder.getMany.mockResolvedValue([
+        { amountCents: 1000, paidAt: new Date('2026-07-13T10:00:00.000Z') },
+      ]);
+      checkInQueryBuilder.getCount
+        .mockResolvedValueOnce(20) // totalCheckInsCount
+        .mockResolvedValueOnce(5); // checkInsCount de la sucursal
+
+      const report = await service.getRevenue(admin, {
+        locationId: 'location-a',
+      });
+
+      expect(report.locationEstimate).toEqual({
+        locationId: 'location-a',
+        checkInsCount: 5,
+        totalCheckInsCount: 20,
+        estimatedCents: 250, // 1000 * (5/20)
+      });
+    });
+
+    it('con locationId pero sin check-ins en el rango, estimatedCents es null', async () => {
+      checkInQueryBuilder.getCount.mockResolvedValue(0);
+
+      const report = await service.getRevenue(admin, {
+        locationId: 'location-a',
+      });
+
+      expect(report.locationEstimate?.estimatedCents).toBeNull();
+    });
+
+    it('sin locationId, no agrega locationEstimate', async () => {
+      const report = await service.getRevenue(admin, {});
+
+      expect(report.locationEstimate).toBeUndefined();
     });
   });
 
@@ -239,6 +322,39 @@ describe('ReportsService', () => {
       expect(report.arrCents).toBe(0);
       expect(report.churnRate).toBe(0);
       expect(report.ltvCents).toBeNull();
+    });
+
+    it('con locationId, estima MRR/ARR proporcional según check-ins', async () => {
+      membershipQueryBuilder.getRawOne.mockResolvedValue({ sum: '10000' });
+      membershipQueryBuilder.getCount
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(0);
+      checkInQueryBuilder.getCount
+        .mockResolvedValueOnce(4) // totalCheckInsCount
+        .mockResolvedValueOnce(1); // checkInsCount de la sucursal
+
+      const report = await service.getFinance(admin, {
+        locationId: 'location-a',
+      });
+
+      expect(report.locationEstimate).toEqual({
+        locationId: 'location-a',
+        checkInsCount: 1,
+        totalCheckInsCount: 4,
+        estimatedMrrCents: 2500, // 10000 * (1/4)
+        estimatedArrCents: 30000,
+      });
+    });
+
+    it('rechaza con ForbiddenException si la sucursal es de otro gimnasio', async () => {
+      locationRepository.findOne.mockResolvedValue({
+        id: 'location-b',
+        gymId: 'gym-b',
+      });
+
+      await expect(
+        service.getFinance(admin, { locationId: 'location-b' }),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

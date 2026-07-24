@@ -5,6 +5,8 @@ import { ClassOrResource } from '../classes/entities/class-or-resource.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { Invoice } from '../memberships/entities/invoice.entity';
 import { Membership } from '../memberships/entities/membership.entity';
+import { CheckIn } from '../checkins/entities/check-in.entity';
+import { Location } from '../locations/entities/location.entity';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
 
@@ -15,6 +17,8 @@ import { ReportsController } from './reports.controller';
       Reservation,
       Invoice,
       Membership,
+      CheckIn,
+      Location,
     ]),
   ],
   controllers: [ReportsController],
